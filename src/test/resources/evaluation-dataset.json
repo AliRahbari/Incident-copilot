@@ -1,0 +1,76 @@
+[
+  {
+    "id": "TC-001",
+    "title": "NullPointerException in order processing service",
+    "category": "java_exception",
+    "difficulty": "easy",
+    "input": "2026-04-14 09:23:17.445 ERROR [order-service,tid=http-nio-8080-exec-14] c.a.order.service.OrderService - Failed to process order for customer request\njava.lang.NullPointerException: Cannot invoke \"com.acme.order.model.Address.getZipCode()\" because the return value of \"com.acme.order.model.Customer.getShippingAddress()\" is null\n\tat com.acme.order.service.OrderService.calculateShipping(OrderService.java:87)\n\tat com.acme.order.service.OrderService.processOrder(OrderService.java:54)\n\tat com.acme.order.controller.OrderController.submitOrder(OrderController.java:41)\n\tat java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)\n\tat org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885)\n\tat org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:178)\n2026-04-14 09:23:17.446 WARN  [order-service,tid=http-nio-8080-exec-14] c.a.order.controller.OrderController - Returning 500 to client for orderId=ORD-88214",
+    "expectedObservations": [
+      "NullPointerException thrown at OrderService.calculateShipping(OrderService.java:87)",
+      "Customer.getShippingAddress() returned null",
+      "Code attempted to call Address.getZipCode() on the null address",
+      "Error occurred on thread http-nio-8080-exec-14 in order-service",
+      "HTTP 500 returned to client for orderId=ORD-88214"
+    ],
+    "expectedCauses": [
+      "Customer record has no shipping address populated — missing validation before order submission",
+      "Upstream form or API allowed order creation without a required shipping address"
+    ],
+    "expectedNextSteps": [
+      "Add null check or validation for shippingAddress before calling calculateShipping",
+      "Query the database for customer linked to ORD-88214 to confirm whether shippingAddress is missing or was lost in transit",
+      "Review OrderService.java:87 and add defensive guard or @NotNull constraint on the Customer.shippingAddress field",
+      "Check if this is a regression by reviewing recent changes to the order submission flow"
+    ]
+  },
+  {
+    "id": "TC-002",
+    "title": "IllegalStateException from Kafka consumer rebalance during message processing",
+    "category": "java_exception",
+    "difficulty": "medium",
+    "input": "2026-04-14 11:05:42.318 ERROR [payment-consumer,tid=kafka-consumer-payment-group-3] c.a.payment.consumer.PaymentEventConsumer - Error processing payment event from topic payments.completed\njava.lang.IllegalStateException: This consumer has already been closed.\n\tat org.apache.kafka.clients.consumer.KafkaConsumer.acquireAndEnsureOpen(KafkaConsumer.java:2762)\n\tat org.apache.kafka.clients.consumer.KafkaConsumer.commitSync(KafkaConsumer.java:1510)\n\tat com.acme.payment.consumer.PaymentEventConsumer.handlePayment(PaymentEventConsumer.java:63)\n\tat com.acme.payment.consumer.PaymentEventConsumer.onMessage(PaymentEventConsumer.java:38)\n\tat org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.invokeListener(KafkaMessageListenerContainer.java:2078)\n2026-04-14 11:05:42.112 WARN  [payment-consumer,tid=kafka-consumer-payment-group-3] o.a.k.c.c.internals.ConsumerCoordinator - [Consumer clientId=consumer-payment-group-3, groupId=payment-group] Revoke previously assigned partitions payments.completed-0, payments.completed-1, payments.completed-2\n2026-04-14 11:05:41.998 INFO  [payment-consumer,tid=kafka-consumer-payment-group-3] o.a.k.c.c.internals.ConsumerCoordinator - [Consumer clientId=consumer-payment-group-3, groupId=payment-group] Request joining group due to: group is already rebalancing\n2026-04-14 11:05:33.005 WARN  [payment-consumer,tid=kafka-consumer-payment-group-3] o.a.k.c.c.internals.AbstractCoordinator - [Consumer clientId=consumer-payment-group-3, groupId=payment-group] consumer poll timeout has expired. This means the time between subsequent calls to poll() was longer than the configured max.poll.interval.ms, which typically implies that the poll loop is spending too much time processing messages. You can address this by increasing max.poll.interval.ms or by reducing the maximum size of batches returned in poll() with max.poll.records.",
+    "expectedObservations": [
+      "IllegalStateException: consumer has already been closed, thrown at PaymentEventConsumer.handlePayment(PaymentEventConsumer.java:63)",
+      "Consumer attempted commitSync after the KafkaConsumer was closed",
+      "Consumer poll timeout expired — time between poll() calls exceeded max.poll.interval.ms",
+      "Consumer group payment-group triggered rebalance and revoked partitions payments.completed-0, -1, -2",
+      "Kafka warning explicitly states poll loop is spending too much time processing messages"
+    ],
+    "expectedCauses": [
+      "Message processing in handlePayment takes longer than max.poll.interval.ms, causing the broker to revoke partitions and close the consumer while processing is still in-flight",
+      "Batch size (max.poll.records) may be too large, causing cumulative processing time to exceed the poll interval"
+    ],
+    "expectedNextSteps": [
+      "Increase max.poll.interval.ms in consumer configuration to accommodate actual processing time",
+      "Reduce max.poll.records to limit the number of messages fetched per poll cycle",
+      "Profile PaymentEventConsumer.handlePayment to identify why processing is slow (e.g., blocking I/O, downstream calls)",
+      "Consider making the offset commit asynchronous or moving heavy processing to a separate thread pool"
+    ]
+  },
+  {
+    "id": "TC-003",
+    "title": "HikariCP connection pool timeout under sustained load",
+    "category": "database",
+    "difficulty": "medium",
+    "input": "2026-04-14 14:32:05.221 WARN  [inventory-service,tid=http-nio-8080-exec-7] com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Connection is not available, request timed out after 30000ms.\n2026-04-14 14:32:05.223 ERROR [inventory-service,tid=http-nio-8080-exec-7] c.a.inventory.service.InventoryService - Failed to check stock for SKU=WIDGET-4490\norg.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC connection\n\tat org.springframework.jdbc.datasource.DataSourceUtils.getConnection(DataSourceUtils.java:84)\n\tat org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:376)\n\tat com.acme.inventory.service.InventoryService.getStockLevel(InventoryService.java:44)\n\tat com.acme.inventory.controller.InventoryController.checkStock(InventoryController.java:28)\nCaused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.\n\tat com.zaxxer.hikari.pool.HikariPool.createTimeoutException(HikariPool.java:686)\n\tat com.zaxxer.hikari.pool.HikariPool.getConnection(HikariPool.java:179)\n2026-04-14 14:32:05.224 WARN  [inventory-service,tid=http-nio-8080-exec-7] com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Pool stats (total=10, active=10, idle=0, waiting=23)\n2026-04-14 14:32:01.887 WARN  [inventory-service,tid=HikariPool-1 housekeeper] com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=1m32s).\n2026-04-14 14:31:58.102 WARN  [inventory-service,tid=http-nio-8080-exec-3] com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Connection is not available, request timed out after 30000ms.\n2026-04-14 14:31:55.009 WARN  [inventory-service,tid=http-nio-8080-exec-11] com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Connection is not available, request timed out after 30000ms.",
+    "expectedObservations": [
+      "HikariPool-1 connection request timed out after 30000ms — multiple occurrences across threads exec-3, exec-7, exec-11",
+      "Pool stats show total=10, active=10, idle=0, waiting=23 — pool fully exhausted with 23 requests queued",
+      "Thread starvation or clock leap detected with housekeeper delta=1m32s",
+      "CannotGetJdbcConnectionException thrown at InventoryService.getStockLevel(InventoryService.java:44)",
+      "Failure affected stock check for SKU=WIDGET-4490"
+    ],
+    "expectedCauses": [
+      "Connection pool size (10) is too small for current request concurrency — 23 threads are waiting for a connection",
+      "Long-running or leaked database connections are holding all 10 pool slots, preventing recycling",
+      "Thread starvation (housekeeper delta=1m32s) suggests the JVM is under severe CPU or GC pressure, delaying connection management"
+    ],
+    "expectedNextSteps": [
+      "Increase HikariCP maximumPoolSize in application configuration (e.g., from 10 to 20-30) based on expected concurrency",
+      "Investigate the thread starvation warning — check GC logs, CPU utilization, and thread dumps at the time of the incident",
+      "Review slow query logs on the database to identify queries that hold connections for extended periods",
+      "Add connection leak detection by setting spring.datasource.hikari.leak-detection-threshold to a value like 30000",
+      "Monitor the database server's max_connections to ensure it can handle the increased pool size"
+    ]
+  }
+]
