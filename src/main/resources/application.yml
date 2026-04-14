@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 8585
 
 openai:
   api-key: ${OPENAI_API_KEY}       # set via environment variable
@@ -7,6 +7,12 @@ openai:
   model: gpt-4o
   connect-timeout-seconds: 5
   read-timeout-seconds: 30
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
 
 logging:
   level:
