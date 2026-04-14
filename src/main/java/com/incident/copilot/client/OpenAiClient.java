@@ -58,7 +58,7 @@ public class OpenAiClient {
         Map<String, Object> body = Map.of(
                 "model", model,
                 "temperature", 0.2,
-                "max_tokens", 1024,
+                "max_tokens", 2048,
                 "response_format", Map.of("type", "json_object"),
                 "messages", List.of(
                         Map.of("role", "system", "content", systemPrompt),
