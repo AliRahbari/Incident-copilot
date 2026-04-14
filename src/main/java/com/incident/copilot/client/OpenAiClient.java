@@ -2,13 +2,16 @@ package com.incident.copilot.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.incident.copilot.exception.LlmClientException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -29,12 +32,20 @@ public class OpenAiClient {
             @Value("${openai.api-key}") String apiKey,
             @Value("${openai.base-url:https://api.openai.com}") String baseUrl,
             @Value("${openai.model:gpt-4o}") String model,
+            @Value("${openai.connect-timeout-seconds:5}") int connectTimeoutSeconds,
+            @Value("${openai.read-timeout-seconds:30}") int readTimeoutSeconds,
             ObjectMapper objectMapper
     ) {
         this.model = model;
         this.objectMapper = objectMapper;
+
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(connectTimeoutSeconds));
+        factory.setReadTimeout(Duration.ofSeconds(readTimeoutSeconds));
+
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
+                .requestFactory(factory)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
                 .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                 .build();
@@ -47,6 +58,8 @@ public class OpenAiClient {
         Map<String, Object> body = Map.of(
                 "model", model,
                 "temperature", 0.2,
+                "max_tokens", 1024,
+                "response_format", Map.of("type", "json_object"),
                 "messages", List.of(
                         Map.of("role", "system", "content", systemPrompt),
                         Map.of("role", "user", "content", userMessage)
@@ -63,12 +76,21 @@ public class OpenAiClient {
 
         try {
             JsonNode root = objectMapper.readTree(responseBody);
-            String content = root.path("choices").get(0).path("message").path("content").asText();
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) {
+                throw new LlmClientException("OpenAI response contained no choices");
+            }
+            String content = choices.get(0).path("message").path("content").asText();
+            if (content == null || content.isBlank()) {
+                throw new LlmClientException("OpenAI response contained empty content");
+            }
             log.debug("Received response ({} chars)", content.length());
             return content;
+        } catch (LlmClientException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to parse OpenAI response", e);
-            throw new RuntimeException("Failed to parse OpenAI response", e);
+            throw new LlmClientException("Failed to parse OpenAI response", e);
         }
     }
 }
