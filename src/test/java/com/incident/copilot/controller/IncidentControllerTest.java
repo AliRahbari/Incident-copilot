@@ -1,6 +1,7 @@
 package com.incident.copilot.controller;
 
 import com.incident.copilot.dto.AnalyzeResponse;
+import com.incident.copilot.dto.PossibleCause;
 import com.incident.copilot.service.IncidentAnalysisService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,8 +62,13 @@ class IncidentControllerTest {
         when(analysisService.analyze(anyString()))
                 .thenReturn(new AnalyzeResponse(
                         "Database connection pool exhausted",
-                        List.of("Too many concurrent queries"),
-                        List.of("Increase pool size")
+                        List.of("HikariPool-1 - Connection is not available"),
+                        List.of(new PossibleCause(
+                                "Too many concurrent queries",
+                                "high",
+                                List.of("HikariPool-1 - Connection is not available, request timed out after 30000ms")
+                        )),
+                        List.of("Increase HikariCP maximumPoolSize in application.yml")
                 ));
 
         mockMvc.perform(post("/analyze")
@@ -72,7 +78,10 @@ class IncidentControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.summary").value("Database connection pool exhausted"))
-                .andExpect(jsonPath("$.possibleCauses[0]").value("Too many concurrent queries"))
-                .andExpect(jsonPath("$.nextSteps[0]").value("Increase pool size"));
+                .andExpect(jsonPath("$.observations[0]").value("HikariPool-1 - Connection is not available"))
+                .andExpect(jsonPath("$.possibleCauses[0].cause").value("Too many concurrent queries"))
+                .andExpect(jsonPath("$.possibleCauses[0].confidence").value("high"))
+                .andExpect(jsonPath("$.possibleCauses[0].evidence[0]").exists())
+                .andExpect(jsonPath("$.nextSteps[0]").value("Increase HikariCP maximumPoolSize in application.yml"));
     }
 }

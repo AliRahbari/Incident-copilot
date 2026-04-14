@@ -34,8 +34,18 @@ class IncidentAnalysisServiceTest {
         String validJson = """
                 {
                   "summary": "OOM in pod-xyz",
-                  "possibleCauses": ["Memory leak in cache layer"],
-                  "nextSteps": ["Restart the pod", "Check heap dump"]
+                  "observations": [
+                    "java.lang.OutOfMemoryError at line 42",
+                    "Heap usage reached 98% before crash"
+                  ],
+                  "possibleCauses": [
+                    {
+                      "cause": "Memory leak in cache layer",
+                      "confidence": "high",
+                      "evidence": ["OutOfMemoryError: Java heap space at CacheManager.put(CacheManager.java:42)"]
+                    }
+                  ],
+                  "nextSteps": ["Capture heap dump with jmap -dump:live,format=b,file=heap.hprof <pid>"]
                 }
                 """;
         when(openAiClient.chat(anyString(), anyString())).thenReturn(validJson);
@@ -43,8 +53,11 @@ class IncidentAnalysisServiceTest {
         AnalyzeResponse response = service.analyze("some error log");
 
         assertEquals("OOM in pod-xyz", response.summary());
+        assertEquals(2, response.observations().size());
         assertEquals(1, response.possibleCauses().size());
-        assertEquals(2, response.nextSteps().size());
+        assertEquals("high", response.possibleCauses().get(0).confidence());
+        assertEquals(1, response.possibleCauses().get(0).evidence().size());
+        assertEquals(1, response.nextSteps().size());
     }
 
     @Test
@@ -53,7 +66,14 @@ class IncidentAnalysisServiceTest {
                 ```json
                 {
                   "summary": "Connection timeout",
-                  "possibleCauses": ["DNS resolution failure"],
+                  "observations": ["java.net.SocketTimeoutException after 30s"],
+                  "possibleCauses": [
+                    {
+                      "cause": "DNS resolution failure",
+                      "confidence": "medium",
+                      "evidence": ["SocketTimeoutException on host db-primary.internal"]
+                    }
+                  ],
                   "nextSteps": ["Check /etc/resolv.conf"]
                 }
                 ```
@@ -63,7 +83,9 @@ class IncidentAnalysisServiceTest {
         AnalyzeResponse response = service.analyze("timeout error log");
 
         assertEquals("Connection timeout", response.summary());
+        assertNotNull(response.observations());
         assertNotNull(response.possibleCauses());
+        assertEquals("medium", response.possibleCauses().get(0).confidence());
         assertNotNull(response.nextSteps());
     }
 
@@ -73,7 +95,14 @@ class IncidentAnalysisServiceTest {
                 ```
                 {
                   "summary": "Disk full",
-                  "possibleCauses": ["Log rotation disabled"],
+                  "observations": ["No space left on device in /var/log"],
+                  "possibleCauses": [
+                    {
+                      "cause": "Log rotation disabled",
+                      "confidence": "high",
+                      "evidence": ["ENOSPC error writing to /var/log/app.log"]
+                    }
+                  ],
                   "nextSteps": ["Free disk space"]
                 }
                 ```
@@ -83,6 +112,37 @@ class IncidentAnalysisServiceTest {
         AnalyzeResponse response = service.analyze("disk full error");
 
         assertEquals("Disk full", response.summary());
+    }
+
+    @Test
+    void analyze_multipleCausesWithDifferentConfidence_parsesAll() {
+        String json = """
+                {
+                  "summary": "Service returning 503s",
+                  "observations": ["HTTP 503 on /api/users", "upstream connect timeout"],
+                  "possibleCauses": [
+                    {
+                      "cause": "Backend pod is unresponsive",
+                      "confidence": "high",
+                      "evidence": ["upstream connect error", "503 Service Unavailable"]
+                    },
+                    {
+                      "cause": "Resource limits too low",
+                      "confidence": "low",
+                      "evidence": ["No OOM events visible, but pod restarts detected"]
+                    }
+                  ],
+                  "nextSteps": ["Check pod health", "Review resource limits"]
+                }
+                """;
+        when(openAiClient.chat(anyString(), anyString())).thenReturn(json);
+
+        AnalyzeResponse response = service.analyze("some input");
+
+        assertEquals(2, response.possibleCauses().size());
+        assertEquals("high", response.possibleCauses().get(0).confidence());
+        assertEquals("low", response.possibleCauses().get(1).confidence());
+        assertEquals(2, response.possibleCauses().get(0).evidence().size());
     }
 
     @Test
