@@ -1,23 +1,33 @@
 # Incident Copilot
 
-A lightweight backend service that analyzes application logs and stack traces using an LLM and returns structured, evidence-based incident analysis.
+Turn raw logs into actionable incident insights in seconds.
 
+Incident Copilot is a lightweight backend service that analyzes application logs and stack traces using an LLM and returns structured, evidence-based incident analysis — including observations, ranked causes, confidence levels, and concrete next steps.
 ## Why
 
-When an incident hits, developers spend valuable time reading through logs, identifying patterns, and forming hypotheses. Incident Copilot automates the first pass of that triage — turning raw logs into a structured analysis with observations, ranked causes, confidence levels, and concrete next steps.
+When an incident hits, engineers spend time scanning logs, forming hypotheses, and figuring out where to start.
 
-This is not a replacement for human judgment. It is a fast first responder that helps you focus on what matters.
+Incident Copilot automates that first step:
+- highlights what matters
+- suggests likely causes
+- and points you to the next action
+
+It is not a replacement for human judgment — it is a fast first responder that reduces time-to-understanding.
 
 ## Features
 
-- Single REST endpoint for incident analysis (`POST /analyze`)
-- Structured JSON response with observations, ranked causes, and next steps
-- Confidence levels (`high` / `medium` / `low`) for each possible cause
-- Evidence-based analysis — every cause is linked to specific input references
-- Input validation with clear error responses
-- Configurable HTTP timeouts for LLM calls
-- OpenAI JSON mode for reliable structured output
-- Custom exception handling with consistent error format
+- Analyze raw logs and stack traces in seconds
+- Extract key observations directly from the input
+- Suggest likely causes with confidence levels
+- Provide evidence-backed reasoning
+- Recommend actionable next debugging steps
+
+### Technical highlights
+
+- REST API (POST /analyze)
+- OpenAI JSON mode for structured output
+- Input validation and consistent error handling
+- Configurable timeouts for LLM calls
 
 ## Tech Stack
 
@@ -164,12 +174,20 @@ This is an MVP. Key limitations:
 
 ## Roadmap
 
-- [ ] Add API key authentication
-- [ ] Add rate limiting
-- [ ] Support multiple LLM providers (Anthropic, local models)
-- [ ] Add request/response logging and observability
-- [ ] Containerize with Docker
-- [ ] Add CI/CD pipeline
+### Short term
+- Add API key authentication
+- Add rate limiting
+- Containerize with Docker
+
+### Mid term
+- Support multiple LLM providers
+- Add observability (logs, metrics)
+- CI/CD pipeline
+
+### Long term
+- Incident pattern detection
+- Integration with alerting tools
+- Historical analysis
 
 ## Future Ideas
 
@@ -178,6 +196,20 @@ This is an MVP. Key limitations:
 - Integration with alerting tools (PagerDuty, Opsgenie)
 - Slack/Teams bot interface
 - Historical incident pattern matching with a vector store
+
+## When to use Incident Copilot
+
+- You have a stack trace and need a quick starting point
+- You want a structured first-pass analysis before deep debugging
+- You are dealing with unfamiliar code or services
+- You want to reduce time-to-diagnosis during incidents
+
+## What this is NOT
+
+- Not a full observability platform
+- Not a replacement for logs, tracing, or metrics
+- Not guaranteed to be correct in all cases
+- Not a production-grade incident management system (yet)
 
 ## License
 
