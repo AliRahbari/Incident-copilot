@@ -5,6 +5,8 @@ openai:
   api-key: ${OPENAI_API_KEY}       # set via environment variable
   base-url: https://api.openai.com
   model: gpt-4o
+  connect-timeout-seconds: 5
+  read-timeout-seconds: 30
 
 logging:
   level:

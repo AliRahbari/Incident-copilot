@@ -3,6 +3,7 @@ package com.incident.copilot.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.incident.copilot.client.OpenAiClient;
 import com.incident.copilot.dto.AnalyzeResponse;
+import com.incident.copilot.exception.LlmResponseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -53,18 +54,24 @@ public class IncidentAnalysisService {
         log.info("Analyzing input ({} chars)", input.length());
 
         String rawResponse = openAiClient.chat(SYSTEM_PROMPT, input);
-
-        // Strip markdown code fences if the model wraps its output
-        String json = rawResponse.strip();
-        if (json.startsWith("```")) {
-            json = json.replaceAll("^```(?:json)?\\s*", "").replaceAll("\\s*```$", "");
-        }
+        String json = stripMarkdownFences(rawResponse);
 
         try {
             return objectMapper.readValue(json, AnalyzeResponse.class);
         } catch (Exception e) {
             log.error("LLM returned unparseable response: {}", rawResponse, e);
-            throw new RuntimeException("Failed to parse LLM response into structured format", e);
+            throw new LlmResponseException("Failed to parse LLM response into structured format", e);
         }
+    }
+
+    /**
+     * Strips markdown code fences if the model wraps its JSON output.
+     */
+    static String stripMarkdownFences(String raw) {
+        String stripped = raw.strip();
+        if (stripped.startsWith("```")) {
+            stripped = stripped.replaceAll("^```(?:json)?\\s*", "").replaceAll("\\s*```$", "");
+        }
+        return stripped;
     }
 }

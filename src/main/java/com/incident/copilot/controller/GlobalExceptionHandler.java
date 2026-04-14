@@ -1,5 +1,8 @@
 package com.incident.copilot.controller;
 
+import com.incident.copilot.dto.ErrorResponse;
+import com.incident.copilot.exception.LlmClientException;
+import com.incident.copilot.exception.LlmResponseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -9,34 +12,46 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.RestClientException;
 
-import java.util.Map;
-
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException ex) {
+    public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .map(e -> e.getField() + ": " + e.getDefaultMessage())
                 .findFirst()
                 .orElse("Invalid request");
 
-        return ResponseEntity.badRequest().body(Map.of("error", message));
+        return ResponseEntity.badRequest().body(new ErrorResponse(message));
+    }
+
+    @ExceptionHandler(LlmClientException.class)
+    public ResponseEntity<ErrorResponse> handleLlmClient(LlmClientException ex) {
+        log.error("LLM client error", ex);
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(new ErrorResponse("LLM service error — please try again later"));
+    }
+
+    @ExceptionHandler(LlmResponseException.class)
+    public ResponseEntity<ErrorResponse> handleLlmResponse(LlmResponseException ex) {
+        log.error("LLM returned unparseable response", ex);
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(new ErrorResponse("LLM returned an invalid response — please try again"));
     }
 
     @ExceptionHandler(RestClientException.class)
-    public ResponseEntity<Map<String, String>> handleLlmError(RestClientException ex) {
+    public ResponseEntity<ErrorResponse> handleRestClient(RestClientException ex) {
         log.error("LLM API call failed", ex);
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(Map.of("error", "LLM service unavailable — please try again later"));
+                .body(new ErrorResponse("LLM service unavailable — please try again later"));
     }
 
-    @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<Map<String, String>> handleRuntime(RuntimeException ex) {
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
         log.error("Unexpected error", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Internal server error"));
+                .body(new ErrorResponse("Internal server error"));
     }
 }
