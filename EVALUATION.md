@@ -1,31 +1,28 @@
-# Incident Copilot – Evaluation Sheet
+# Quick Evaluation
 
-## Scoring Guide
+- **Test Case ID:**
+- **Title:**
+- **Category:**
+- **Difficulty:**
 
-Use this scale for each criterion:
+## Scores (0–5)
+- Summary quality:
+- Grounding in input:
+- Cause relevance:
+- Confidence calibration:
+- Evidence quality:
+- Next-step usefulness:
+- Hallucination resistance:
+- Overall usefulness:
 
-- 5 = Excellent
-- 4 = Good
-- 3 = Acceptable
-- 2 = Weak
-- 1 = Poor
-- 0 = Failed / Missing
+## Flags
+- Invented facts? Yes / No
+- Too generic? Yes / No
+- Missed key clue? Yes / No
+- Invalid JSON? Yes / No
 
----
+## Verdict
+- Pass / Concern / Fail
 
-## Test Case Information
-
-- **Test Case ID:**  
-- **Title:**  
-- **Category:**  
-- **Difficulty:** easy / medium / hard
-- **Date Tested:**  
-- **Input Source:** synthetic / real log / production sample
-- **Tester:**  
-
----
-
-## Input
-
-```text
-PASTE INPUT LOG / STACK TRACE HERE
+## Notes
+-
