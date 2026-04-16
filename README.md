@@ -91,7 +91,29 @@ export OPENAI_API_KEY=sk-...
 ./mvnw spring-boot:run
 ```
 
-The server starts on `http://localhost:8080`.
+The server starts on `http://localhost:8585`.
+
+### Run with Docker
+
+```bash
+# Build the image
+docker build -t incident-copilot .
+
+# Run the container
+docker run -p 8585:8585 -e OPENAI_API_KEY=sk-... incident-copilot
+```
+
+Or use Docker Compose:
+
+```bash
+# Set your API key (or add it to a .env file in the project root)
+export OPENAI_API_KEY=sk-...
+
+# Build and run
+docker compose up --build
+```
+
+The server starts on `http://localhost:8585`.
 
 ### Run Tests
 
@@ -177,7 +199,7 @@ This is an MVP. Key limitations:
 ### Short term
 - Add API key authentication
 - Add rate limiting
-- Containerize with Docker
+- ~~Containerize with Docker~~ Done
 
 ### Mid term
 - Support multiple LLM providers

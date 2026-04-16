@@ -1,0 +1,7 @@
+services:
+  incident-copilot:
+    build: .
+    ports:
+      - "8585:8585"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
