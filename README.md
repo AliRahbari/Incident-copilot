@@ -103,7 +103,9 @@ docker build -t incident-copilot .
 docker run -p 8585:8585 -e OPENAI_API_KEY=sk-... incident-copilot
 ```
 
-Or use Docker Compose:
+The server starts on `http://localhost:8585`.
+
+### Run with Docker Compose
 
 ```bash
 # Set your API key (or add it to a .env file in the project root)
@@ -199,7 +201,6 @@ This is an MVP. Key limitations:
 ### Short term
 - Add API key authentication
 - Add rate limiting
-- ~~Containerize with Docker~~ Done
 
 ### Mid term
 - Support multiple LLM providers
