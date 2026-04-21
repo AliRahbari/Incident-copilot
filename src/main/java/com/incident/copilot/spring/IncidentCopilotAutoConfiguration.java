@@ -1,0 +1,46 @@
+package com.incident.copilot.spring;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+
+@AutoConfiguration
+@EnableConfigurationProperties(IncidentCopilotProperties.class)
+@ConditionalOnProperty(prefix = "incident-copilot", name = "enabled", havingValue = "true", matchIfMissing = true)
+public class IncidentCopilotAutoConfiguration {
+
+    @Bean
+    @ConditionalOnClass(MeterRegistry.class)
+    @ConditionalOnBean(MeterRegistry.class)
+    @ConditionalOnProperty(prefix = "incident-copilot", name = "publish-metrics", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean(IncidentMetrics.class)
+    public IncidentMetrics micrometerIncidentMetrics(MeterRegistry meterRegistry) {
+        return new MicrometerIncidentMetrics(meterRegistry);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(IncidentMetrics.class)
+    public IncidentMetrics noOpIncidentMetrics() {
+        return new IncidentMetrics.NoOpIncidentMetrics();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public IncidentSignalRecorder incidentSignalRecorder(IncidentMetrics metrics) {
+        return new IncidentSignalRecorder(metrics);
+    }
+
+    @Bean
+    @ConditionalOnClass(HandlerExceptionResolver.class)
+    @ConditionalOnProperty(prefix = "incident-copilot", name = "capture-exceptions", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean(IncidentExceptionCaptureResolver.class)
+    public IncidentExceptionCaptureResolver incidentExceptionCaptureResolver(IncidentSignalRecorder recorder) {
+        return new IncidentExceptionCaptureResolver(recorder);
+    }
+}
