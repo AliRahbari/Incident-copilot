@@ -2,7 +2,10 @@ package com.incident.copilot.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.incident.copilot.client.OpenAiClient;
-import com.incident.copilot.dto.AnalyzeResponse;
+import com.incident.copilot.domain.IncidentAnalysis;
+import com.incident.copilot.domain.IncidentCategory;
+import com.incident.copilot.domain.IncidentInput;
+import com.incident.copilot.domain.IncidentSeverity;
 import com.incident.copilot.exception.LlmResponseException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,14 +53,17 @@ class IncidentAnalysisServiceTest {
                 """;
         when(openAiClient.chat(anyString(), anyString())).thenReturn(validJson);
 
-        AnalyzeResponse response = service.analyze("some error log");
+        IncidentAnalysis analysis = service.analyze(new IncidentInput("some error log"));
 
-        assertEquals("OOM in pod-xyz", response.summary());
-        assertEquals(2, response.observations().size());
-        assertEquals(1, response.possibleCauses().size());
-        assertEquals("high", response.possibleCauses().get(0).confidence());
-        assertEquals(1, response.possibleCauses().get(0).evidence().size());
-        assertEquals(1, response.nextSteps().size());
+        assertEquals("OOM in pod-xyz", analysis.summary());
+        assertEquals(IncidentSeverity.UNKNOWN, analysis.severity());
+        assertEquals(IncidentCategory.UNKNOWN, analysis.category());
+        assertEquals(2, analysis.observations().size());
+        assertEquals("java.lang.OutOfMemoryError at line 42", analysis.observations().get(0).description());
+        assertEquals(1, analysis.possibleCauses().size());
+        assertEquals("high", analysis.possibleCauses().get(0).confidence());
+        assertEquals(1, analysis.possibleCauses().get(0).evidence().size());
+        assertEquals(1, analysis.recommendedActions().size());
     }
 
     @Test
@@ -80,13 +86,13 @@ class IncidentAnalysisServiceTest {
                 """;
         when(openAiClient.chat(anyString(), anyString())).thenReturn(fencedJson);
 
-        AnalyzeResponse response = service.analyze("timeout error log");
+        IncidentAnalysis analysis = service.analyze(new IncidentInput("timeout error log"));
 
-        assertEquals("Connection timeout", response.summary());
-        assertNotNull(response.observations());
-        assertNotNull(response.possibleCauses());
-        assertEquals("medium", response.possibleCauses().get(0).confidence());
-        assertNotNull(response.nextSteps());
+        assertEquals("Connection timeout", analysis.summary());
+        assertNotNull(analysis.observations());
+        assertNotNull(analysis.possibleCauses());
+        assertEquals("medium", analysis.possibleCauses().get(0).confidence());
+        assertNotNull(analysis.recommendedActions());
     }
 
     @Test
@@ -109,9 +115,9 @@ class IncidentAnalysisServiceTest {
                 """;
         when(openAiClient.chat(anyString(), anyString())).thenReturn(fencedJson);
 
-        AnalyzeResponse response = service.analyze("disk full error");
+        IncidentAnalysis analysis = service.analyze(new IncidentInput("disk full error"));
 
-        assertEquals("Disk full", response.summary());
+        assertEquals("Disk full", analysis.summary());
     }
 
     @Test
@@ -137,26 +143,34 @@ class IncidentAnalysisServiceTest {
                 """;
         when(openAiClient.chat(anyString(), anyString())).thenReturn(json);
 
-        AnalyzeResponse response = service.analyze("some input");
+        IncidentAnalysis analysis = service.analyze(new IncidentInput("some input"));
 
-        assertEquals(2, response.possibleCauses().size());
-        assertEquals("high", response.possibleCauses().get(0).confidence());
-        assertEquals("low", response.possibleCauses().get(1).confidence());
-        assertEquals(2, response.possibleCauses().get(0).evidence().size());
+        assertEquals(2, analysis.possibleCauses().size());
+        assertEquals("high", analysis.possibleCauses().get(0).confidence());
+        assertEquals("low", analysis.possibleCauses().get(1).confidence());
+        assertEquals(2, analysis.possibleCauses().get(0).evidence().size());
     }
 
     @Test
     void analyze_malformedJson_throwsLlmResponseException() {
         when(openAiClient.chat(anyString(), anyString())).thenReturn("This is not JSON at all");
 
-        assertThrows(LlmResponseException.class, () -> service.analyze("some input"));
+        assertThrows(LlmResponseException.class,
+                () -> service.analyze(new IncidentInput("some input")));
     }
 
     @Test
     void analyze_incompleteJson_throwsLlmResponseException() {
         when(openAiClient.chat(anyString(), anyString())).thenReturn("{\"summary\": ");
 
-        assertThrows(LlmResponseException.class, () -> service.analyze("some input"));
+        assertThrows(LlmResponseException.class,
+                () -> service.analyze(new IncidentInput("some input")));
+    }
+
+    @Test
+    void analyze_blankInput_rejectedByDomain() {
+        assertThrows(IllegalArgumentException.class,
+                () -> service.analyze(new IncidentInput("")));
     }
 
     @Test

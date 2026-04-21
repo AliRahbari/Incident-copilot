@@ -1,12 +1,21 @@
 package com.incident.copilot.service;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.incident.copilot.client.OpenAiClient;
-import com.incident.copilot.dto.AnalyzeResponse;
+import com.incident.copilot.domain.IncidentAnalysis;
+import com.incident.copilot.domain.IncidentCategory;
+import com.incident.copilot.domain.IncidentInput;
+import com.incident.copilot.domain.IncidentObservation;
+import com.incident.copilot.domain.IncidentSeverity;
+import com.incident.copilot.domain.PossibleCause;
+import com.incident.copilot.domain.RecommendedAction;
 import com.incident.copilot.exception.LlmResponseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 public class IncidentAnalysisService {
@@ -130,18 +139,57 @@ public class IncidentAnalysisService {
         this.objectMapper = objectMapper;
     }
 
-    public AnalyzeResponse analyze(String input) {
-        log.info("Analyzing input ({} chars)", input.length());
+    /**
+     * Analyze an incident and return a framework-agnostic {@link IncidentAnalysis}.
+     * Severity and category are emitted as {@code UNKNOWN} in Phase 1 — the
+     * concepts exist on the domain but the LLM prompt does not yet populate them.
+     */
+    public IncidentAnalysis analyze(IncidentInput input) {
+        log.info("Analyzing input ({} chars)", input.content().length());
 
-        String rawResponse = openAiClient.chat(SYSTEM_PROMPT, input);
+        String rawResponse = openAiClient.chat(SYSTEM_PROMPT, input.content());
         String json = stripMarkdownFences(rawResponse);
 
+        LlmAnalysisResponse parsed;
         try {
-            return objectMapper.readValue(json, AnalyzeResponse.class);
+            parsed = objectMapper.readValue(json, LlmAnalysisResponse.class);
         } catch (Exception e) {
             log.error("LLM returned unparseable response: {}", rawResponse, e);
             throw new LlmResponseException("Failed to parse LLM response into structured format", e);
         }
+
+        return toDomain(parsed);
+    }
+
+    private static IncidentAnalysis toDomain(LlmAnalysisResponse llm) {
+        List<IncidentObservation> observations = llm.observations() == null
+                ? List.of()
+                : llm.observations().stream()
+                        .filter(s -> s != null && !s.isBlank())
+                        .map(IncidentObservation::new)
+                        .toList();
+
+        List<PossibleCause> causes = llm.possibleCauses() == null
+                ? List.of()
+                : llm.possibleCauses().stream()
+                        .map(c -> new PossibleCause(c.cause(), c.confidence(), c.evidence()))
+                        .toList();
+
+        List<RecommendedAction> actions = llm.nextSteps() == null
+                ? List.of()
+                : llm.nextSteps().stream()
+                        .filter(s -> s != null && !s.isBlank())
+                        .map(RecommendedAction::new)
+                        .toList();
+
+        return new IncidentAnalysis(
+                llm.summary(),
+                IncidentSeverity.UNKNOWN,
+                IncidentCategory.UNKNOWN,
+                observations,
+                causes,
+                actions
+        );
     }
 
     /**
@@ -153,5 +201,21 @@ public class IncidentAnalysisService {
             stripped = stripped.replaceAll("^```(?:json)?\\s*", "").replaceAll("\\s*```$", "");
         }
         return stripped;
+    }
+
+    /**
+     * Shape of the LLM's JSON output. Kept package-private and separate from the
+     * public {@code AnalyzeResponse} DTO so the wire contract and the prompt
+     * contract can evolve independently.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record LlmAnalysisResponse(
+            String summary,
+            List<String> observations,
+            List<LlmPossibleCause> possibleCauses,
+            List<String> nextSteps
+    ) {
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        record LlmPossibleCause(String cause, String confidence, List<String> evidence) {}
     }
 }
