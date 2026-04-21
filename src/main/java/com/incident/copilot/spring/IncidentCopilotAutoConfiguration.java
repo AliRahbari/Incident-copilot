@@ -10,7 +10,10 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
-@AutoConfiguration
+@AutoConfiguration(afterName = {
+        "org.springframework.boot.actuate.autoconfigure.metrics.CompositeMeterRegistryAutoConfiguration",
+        "org.springframework.boot.actuate.autoconfigure.metrics.MetricsAutoConfiguration"
+})
 @EnableConfigurationProperties(IncidentCopilotProperties.class)
 @ConditionalOnProperty(prefix = "incident-copilot", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class IncidentCopilotAutoConfiguration {
