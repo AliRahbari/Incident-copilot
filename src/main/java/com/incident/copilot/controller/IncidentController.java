@@ -1,7 +1,10 @@
 package com.incident.copilot.controller;
 
+import com.incident.copilot.domain.IncidentAnalysis;
+import com.incident.copilot.domain.IncidentInput;
 import com.incident.copilot.dto.AnalyzeRequest;
 import com.incident.copilot.dto.AnalyzeResponse;
+import com.incident.copilot.dto.IncidentAnalysisMapper;
 import com.incident.copilot.service.IncidentAnalysisService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -26,14 +29,14 @@ public class IncidentController {
     @PostMapping(value = "/analyze", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AnalyzeResponse> analyze(@Valid @RequestBody AnalyzeRequest request) {
         log.info("POST /analyze (json) — input length: {}", request.input().length());
-        AnalyzeResponse response = analysisService.analyze(request.input());
-        return ResponseEntity.ok(response);
+        IncidentAnalysis analysis = analysisService.analyze(new IncidentInput(request.input()));
+        return ResponseEntity.ok(IncidentAnalysisMapper.toResponse(analysis));
     }
 
     @PostMapping(value = "/analyze", consumes = MediaType.TEXT_PLAIN_VALUE)
     public ResponseEntity<AnalyzeResponse> analyzeText(@RequestBody String input) {
         log.info("POST /analyze (text) — input length: {}", input.length());
-        AnalyzeResponse response = analysisService.analyze(input);
-        return ResponseEntity.ok(response);
+        IncidentAnalysis analysis = analysisService.analyze(new IncidentInput(input));
+        return ResponseEntity.ok(IncidentAnalysisMapper.toResponse(analysis));
     }
 }

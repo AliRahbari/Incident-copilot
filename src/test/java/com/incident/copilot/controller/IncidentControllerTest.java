@@ -1,7 +1,12 @@
 package com.incident.copilot.controller;
 
-import com.incident.copilot.dto.AnalyzeResponse;
-import com.incident.copilot.dto.PossibleCause;
+import com.incident.copilot.domain.IncidentAnalysis;
+import com.incident.copilot.domain.IncidentCategory;
+import com.incident.copilot.domain.IncidentInput;
+import com.incident.copilot.domain.IncidentObservation;
+import com.incident.copilot.domain.IncidentSeverity;
+import com.incident.copilot.domain.PossibleCause;
+import com.incident.copilot.domain.RecommendedAction;
 import com.incident.copilot.service.IncidentAnalysisService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,7 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -59,16 +64,18 @@ class IncidentControllerTest {
 
     @Test
     void analyze_validInput_returns200() throws Exception {
-        when(analysisService.analyze(anyString()))
-                .thenReturn(new AnalyzeResponse(
+        when(analysisService.analyze(any(IncidentInput.class)))
+                .thenReturn(new IncidentAnalysis(
                         "Database connection pool exhausted",
-                        List.of("HikariPool-1 - Connection is not available"),
+                        IncidentSeverity.UNKNOWN,
+                        IncidentCategory.UNKNOWN,
+                        List.of(new IncidentObservation("HikariPool-1 - Connection is not available")),
                         List.of(new PossibleCause(
                                 "Too many concurrent queries",
                                 "high",
                                 List.of("HikariPool-1 - Connection is not available, request timed out after 30000ms")
                         )),
-                        List.of("Increase HikariCP maximumPoolSize in application.yml")
+                        List.of(new RecommendedAction("Increase HikariCP maximumPoolSize in application.yml"))
                 ));
 
         mockMvc.perform(post("/analyze")
