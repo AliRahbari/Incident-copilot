@@ -185,6 +185,32 @@ Content-Type: application/json
 | 502    | LLM returned unparseable response  | `{"error": "LLM returned an invalid response — please try again"}` |
 | 500    | Unexpected server error            | `{"error": "Internal server error"}` |
 
+## Spring integration & metrics
+
+The service ships with a small Spring auto-configuration layer (under `com.incident.copilot.spring`) designed so it can later be extracted into a standalone `incident-copilot-spring-boot-starter` without renaming anything.
+
+### Configuration properties
+
+All keys use the `incident-copilot` prefix and default to `true` (i.e. the integration is fully on out of the box):
+
+| Key | Default | Effect |
+|-----|---------|--------|
+| `incident-copilot.enabled` | `true` | Master switch. When `false`, none of the integration beans are registered. |
+| `incident-copilot.publish-metrics` | `true` | Publish Micrometer metrics when a `MeterRegistry` is present. When `false`, a no-op `IncidentMetrics` is used. |
+| `incident-copilot.capture-exceptions` | `true` | Register a `HandlerExceptionResolver` that records a signal for exceptions thrown from MVC handlers. The resolver never produces a response — it only records and delegates back to the existing `@ControllerAdvice`. |
+
+### Metrics
+
+When a `MeterRegistry` is available and metrics are enabled, a single Micrometer counter is published:
+
+| Metric | Tags | Description |
+|--------|------|-------------|
+| `incident_copilot.captures` | `severity`, `category` | Incremented once per captured incident signal. |
+
+Tag values are the uppercase enum names of `IncidentSeverity` and `IncidentCategory`. Both tags are always present — if severity or category is unknown (for example, when the signal originates from a raw exception rather than a completed analysis), the value is `UNKNOWN`. Sum over tags gives the overall total; filtering by a single tag gives a per-severity or per-category breakdown.
+
+No Actuator dependency is required to emit these metrics — any Micrometer `MeterRegistry` bean on the classpath will do.
+
 ## Current Limitations
 
 This is an MVP. Key limitations:

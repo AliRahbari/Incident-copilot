@@ -9,6 +9,7 @@ import com.incident.copilot.domain.IncidentSeverity;
 import com.incident.copilot.domain.PossibleCause;
 import com.incident.copilot.domain.RecommendedAction;
 import com.incident.copilot.service.IncidentAnalysisService;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Verifies the Spring integration layer end-to-end through MockMvc:
- *  - happy-path POST /analyze increments the capture counter
+ *  - happy-path POST /analyze increments the capture counter with the
+ *    expected severity/category tags
  *  - malformed JSON still returns a clean 400 even though the exception
  *    capture resolver is in the chain (records a signal, does not hijack
  *    the response)
@@ -62,11 +64,11 @@ class IncidentCopilotIntegrationTest {
     }
 
     @Test
-    void validJson_happyPath_incrementsCaptureCounter() throws Exception {
+    void validJson_happyPath_incrementsCaptureCounterWithUnknownTags() throws Exception {
         when(analysisService.analyze(any(IncidentInput.class)))
                 .thenReturn(sampleAnalysis());
 
-        double before = totalCaptured();
+        double before = countWithUnknownTags();
 
         mockMvc.perform(post("/analyze")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -76,12 +78,12 @@ class IncidentCopilotIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.summary").exists());
 
-        assertThat(totalCaptured()).isEqualTo(before + 1.0);
+        assertThat(countWithUnknownTags()).isEqualTo(before + 1.0);
     }
 
     @Test
     void malformedJson_returns400_andExceptionCaptureDoesNotBreakResponse() throws Exception {
-        double before = totalCaptured();
+        double before = countWithUnknownTags();
 
         mockMvc.perform(post("/analyze")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -91,13 +93,16 @@ class IncidentCopilotIntegrationTest {
 
         // The resolver should have recorded the failure signal on its way
         // through, without swallowing the 400 response from the advice.
-        assertThat(totalCaptured()).isEqualTo(before + 1.0);
+        // Throwable-based capture always tags severity=UNKNOWN, category=UNKNOWN.
+        assertThat(countWithUnknownTags()).isEqualTo(before + 1.0);
     }
 
-    private double totalCaptured() {
-        return meterRegistry.find(MicrometerIncidentMetrics.TOTAL).counter() == null
-                ? 0.0
-                : meterRegistry.find(MicrometerIncidentMetrics.TOTAL).counter().count();
+    private double countWithUnknownTags() {
+        Counter counter = meterRegistry.find(MicrometerIncidentMetrics.CAPTURES_METRIC)
+                .tag(MicrometerIncidentMetrics.TAG_SEVERITY, IncidentSeverity.UNKNOWN.name())
+                .tag(MicrometerIncidentMetrics.TAG_CATEGORY, IncidentCategory.UNKNOWN.name())
+                .counter();
+        return counter == null ? 0.0 : counter.count();
     }
 
     private static IncidentAnalysis sampleAnalysis() {
