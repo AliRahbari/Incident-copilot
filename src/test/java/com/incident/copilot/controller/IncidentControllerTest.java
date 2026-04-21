@@ -63,6 +63,41 @@ class IncidentControllerTest {
     }
 
     @Test
+    void analyze_malformedJson_returns400() throws Exception {
+        mockMvc.perform(post("/analyze")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{not valid json"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
+    void analyze_validTextPlainInput_returns200() throws Exception {
+        when(analysisService.analyze(any(IncidentInput.class)))
+                .thenReturn(new IncidentAnalysis(
+                        "Disk full",
+                        IncidentSeverity.UNKNOWN,
+                        IncidentCategory.UNKNOWN,
+                        List.of(new IncidentObservation("No space left on device")),
+                        List.of(new PossibleCause(
+                                "Log rotation disabled",
+                                "high",
+                                List.of("ENOSPC error writing to /var/log/app.log")
+                        )),
+                        List.of(new RecommendedAction("Free disk space"))
+                ));
+
+        mockMvc.perform(post("/analyze")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("ERROR: No space left on device"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary").value("Disk full"))
+                .andExpect(jsonPath("$.observations[0]").value("No space left on device"))
+                .andExpect(jsonPath("$.possibleCauses[0].cause").value("Log rotation disabled"))
+                .andExpect(jsonPath("$.nextSteps[0]").value("Free disk space"));
+    }
+
+    @Test
     void analyze_validInput_returns200() throws Exception {
         when(analysisService.analyze(any(IncidentInput.class)))
                 .thenReturn(new IncidentAnalysis(
