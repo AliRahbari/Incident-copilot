@@ -43,37 +43,47 @@ It is not a replacement for human judgment — it is a fast first responder that
 
 ## Project Structure
 
+The build is a Maven multi-module project with an aggregator POM at the root:
+
 ```
-src/main/java/com/incident/copilot/
-├── IncidentCopilotApplication.java       # Entry point
-├── core/                                  # Framework-agnostic — future incident-copilot-core
-│   ├── domain/                           # Records + enums (IncidentInput, IncidentAnalysis, ...)
-│   ├── analysis/
-│   │   └── IncidentAnalysisService.java  # Plain Java analyzer (no Spring annotations)
-│   └── exception/                        # Domain-level exceptions (LlmClientException, ...)
-├── spring/                                # Spring auto-configuration — future incident-copilot-spring-boot-starter
-│   ├── IncidentCopilotAutoConfiguration.java
-│   ├── IncidentCopilotProperties.java
-│   ├── IncidentSignalRecorder.java
-│   ├── IncidentMetrics.java / MicrometerIncidentMetrics.java
-│   └── IncidentExceptionCaptureResolver.java
-├── client/
-│   └── OpenAiClient.java                 # OpenAI API client with timeouts
-├── controller/
-│   ├── IncidentController.java           # POST /analyze endpoint
-│   └── GlobalExceptionHandler.java       # Centralized error handling
-├── dto/
-│   ├── AnalyzeRequest.java               # Request validation
-│   ├── AnalyzeResponse.java              # Response structure
-│   ├── PossibleCause.java                # Cause with confidence + evidence
-│   ├── ErrorResponse.java                # Error response structure
-│   └── IncidentAnalysisMapper.java       # Domain → wire mapping
-└── config/
-    ├── OpenApiConfig.java                # springdoc
-    └── CoreBeansConfiguration.java       # Wires core analyzer as a Spring bean
+.
+├── pom.xml                                # Aggregator / parent POM (packaging=pom)
+├── incident-copilot-core/                 # Framework-agnostic domain + analysis logic
+│   └── src/main/java/com/incident/copilot/core/
+│       ├── domain/                        # Records + enums (IncidentInput, IncidentAnalysis, ...)
+│       ├── analysis/
+│       │   ├── IncidentAnalysisService.java  # Plain Java analyzer (no Spring annotations)
+│       │   └── LlmClient.java                # LLM client abstraction
+│       └── exception/                     # Domain-level exceptions (LlmClientException, ...)
+└── incident-copilot-app/                  # Spring Boot application — REST API + wiring
+    └── src/main/java/com/incident/copilot/
+        ├── IncidentCopilotApplication.java   # Entry point
+        ├── spring/                        # Spring auto-configuration
+        │   ├── IncidentCopilotAutoConfiguration.java
+        │   ├── IncidentCopilotProperties.java
+        │   ├── IncidentSignalRecorder.java
+        │   ├── IncidentMetrics.java / MicrometerIncidentMetrics.java
+        │   └── IncidentExceptionCaptureResolver.java
+        ├── client/
+        │   └── OpenAiClient.java          # OpenAI API client with timeouts
+        ├── controller/
+        │   ├── IncidentController.java    # POST /analyze endpoint
+        │   └── GlobalExceptionHandler.java # Centralized error handling
+        ├── dto/
+        │   ├── AnalyzeRequest.java        # Request validation
+        │   ├── AnalyzeResponse.java       # Response structure
+        │   ├── PossibleCause.java         # Cause with confidence + evidence
+        │   ├── ErrorResponse.java         # Error response structure
+        │   └── IncidentAnalysisMapper.java # Domain → wire mapping
+        └── config/
+            ├── OpenApiConfig.java         # springdoc
+            └── CoreBeansConfiguration.java # Wires core analyzer as a Spring bean
 ```
 
-The `core` and `spring` packages are internally self-contained so they can be lifted into standalone Maven modules later without code changes.
+### What belongs where
+
+- **`incident-copilot-core`** — pure Java, no Spring dependency. Holds the domain model (records, enums), the `IncidentAnalysisService` analyzer, the `LlmClient` abstraction, and domain-level exceptions. Publishable as a plain library.
+- **`incident-copilot-app`** — the runnable Spring Boot application. Depends on `incident-copilot-core` and adds the REST controller, DTOs and wire mapping, the OpenAI `LlmClient` implementation, the Spring auto-configuration / properties / metrics / exception-capture beans, and the Spring Boot entry point.
 
 ## Getting Started
 
@@ -99,11 +109,20 @@ cd Incident-copilot
 # Set your API key
 export OPENAI_API_KEY=sk-...
 
-# Build and run
-./mvnw spring-boot:run
+# Build the whole project (parent + both modules)
+mvn clean package
+
+# Run the Spring Boot app module
+mvn -pl incident-copilot-app -am spring-boot:run
 ```
 
 The server starts on `http://localhost:8585`.
+
+Alternatively, after `mvn clean package` you can run the produced fat jar directly:
+
+```bash
+java -jar incident-copilot-app/target/incident-copilot-app-*.jar
+```
 
 ### Run with Docker
 
@@ -131,8 +150,10 @@ The server starts on `http://localhost:8585`.
 
 ### Run Tests
 
+Run the full test suite across both modules from the repository root:
+
 ```bash
-./mvnw test
+mvn test
 ```
 
 ## API Usage
@@ -199,7 +220,7 @@ Content-Type: application/json
 
 ## Spring integration & metrics
 
-The service ships with a small Spring auto-configuration layer (under `com.incident.copilot.spring`) designed so it can later be extracted into a standalone `incident-copilot-spring-boot-starter` without renaming anything.
+The service ships with a small Spring auto-configuration layer (under `com.incident.copilot.spring` in the `incident-copilot-app` module).
 
 ### Configuration properties
 
@@ -240,7 +261,7 @@ curl "http://localhost:8585/actuator/metrics/incident.copilot.captures?tag=sever
 
 Only `metrics` is exposed (`management.endpoints.web.exposure.include: metrics`). No `health`, `env`, `beans`, or other endpoints are reachable, and no Actuator security is configured — this is a development and testing aid, not a production-grade observability surface.
 
-The integration tests (`IncidentCopilotIntegrationTest`, `MicrometerIncidentMetricsTest`, `ActuatorMetricsEndpointTest`) cover both the metric contract and its Actuator visibility on every `./mvnw test`.
+The integration tests (`IncidentCopilotIntegrationTest`, `MicrometerIncidentMetricsTest`, `ActuatorMetricsEndpointTest`) cover both the metric contract and its Actuator visibility on every `mvn test`.
 
 ## Current Limitations
 
