@@ -2,6 +2,7 @@ package com.incident.copilot.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.incident.copilot.core.analysis.LlmClient;
 import com.incident.copilot.core.exception.LlmClientException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +21,7 @@ import java.util.Map;
  * Calls the chat completions endpoint and returns the assistant's message content.
  */
 @Component
-public class OpenAiClient {
+public class OpenAiClient implements LlmClient {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiClient.class);
 
