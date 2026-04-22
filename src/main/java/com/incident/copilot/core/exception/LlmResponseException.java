@@ -1,4 +1,4 @@
-package com.incident.copilot.exception;
+package com.incident.copilot.core.exception;
 
 /**
  * Thrown when the LLM returns content that cannot be parsed into the expected structured format.

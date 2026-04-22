@@ -46,22 +46,34 @@ It is not a replacement for human judgment — it is a fast first responder that
 ```
 src/main/java/com/incident/copilot/
 ├── IncidentCopilotApplication.java       # Entry point
+├── core/                                  # Framework-agnostic — future incident-copilot-core
+│   ├── domain/                           # Records + enums (IncidentInput, IncidentAnalysis, ...)
+│   ├── analysis/
+│   │   └── IncidentAnalysisService.java  # Plain Java analyzer (no Spring annotations)
+│   └── exception/                        # Domain-level exceptions (LlmClientException, ...)
+├── spring/                                # Spring auto-configuration — future incident-copilot-spring-boot-starter
+│   ├── IncidentCopilotAutoConfiguration.java
+│   ├── IncidentCopilotProperties.java
+│   ├── IncidentSignalRecorder.java
+│   ├── IncidentMetrics.java / MicrometerIncidentMetrics.java
+│   └── IncidentExceptionCaptureResolver.java
 ├── client/
-│   └── OpenAiClient.java                # OpenAI API client with timeouts
+│   └── OpenAiClient.java                 # OpenAI API client with timeouts
 ├── controller/
-│   ├── IncidentController.java          # POST /analyze endpoint
-│   └── GlobalExceptionHandler.java      # Centralized error handling
+│   ├── IncidentController.java           # POST /analyze endpoint
+│   └── GlobalExceptionHandler.java       # Centralized error handling
 ├── dto/
-│   ├── AnalyzeRequest.java              # Request validation
-│   ├── AnalyzeResponse.java             # Response structure
-│   ├── PossibleCause.java               # Cause with confidence + evidence
-│   └── ErrorResponse.java               # Error response structure
-├── exception/
-│   ├── LlmClientException.java          # API call failures
-│   └── LlmResponseException.java        # Unparseable LLM responses
-└── service/
-    └── IncidentAnalysisService.java      # Analysis orchestration + prompt
+│   ├── AnalyzeRequest.java               # Request validation
+│   ├── AnalyzeResponse.java              # Response structure
+│   ├── PossibleCause.java                # Cause with confidence + evidence
+│   ├── ErrorResponse.java                # Error response structure
+│   └── IncidentAnalysisMapper.java       # Domain → wire mapping
+└── config/
+    ├── OpenApiConfig.java                # springdoc
+    └── CoreBeansConfiguration.java       # Wires core analyzer as a Spring bean
 ```
+
+The `core` and `spring` packages are internally self-contained so they can be lifted into standalone Maven modules later without code changes.
 
 ## Getting Started
 
@@ -209,11 +221,26 @@ When a `MeterRegistry` is available and metrics are enabled, a single Micrometer
 
 Tag values are the uppercase enum names of `IncidentSeverity` and `IncidentCategory`. Both tags are always present — if severity or category is unknown (for example, when the signal originates from a raw exception rather than a completed analysis), the value is `UNKNOWN`. Sum over tags gives the overall total; filtering by a single tag gives a per-severity or per-category breakdown.
 
-No Actuator dependency is required to emit these metrics — any Micrometer `MeterRegistry` bean on the classpath will do.
+The capture code path does not require Actuator — any Micrometer `MeterRegistry` bean is enough to emit. Actuator is pulled in by the application so the metric can be *inspected* over HTTP (see below). A future extracted `incident-copilot-spring-boot-starter` will not force Actuator on its consumers.
 
-#### Verifying metrics in development
+#### Inspecting metrics via Actuator
 
-The integration tests (`IncidentCopilotIntegrationTest`, `MicrometerIncidentMetricsTest`) wire a `SimpleMeterRegistry` and assert the metric name and tag values, so the contract is exercised on every `./mvnw test`. To inspect metrics on a running instance, add `spring-boot-starter-actuator` to your own project and enable the `/actuator/metrics/incident.copilot.captures` endpoint — the starter itself deliberately does not pull Actuator in.
+The application exposes a minimal Actuator surface — only the `metrics` endpoint — for local inspection:
+
+```bash
+# List all registered metric names (includes incident.copilot.captures)
+curl http://localhost:8585/actuator/metrics
+
+# Show the captures counter with available tags and total value
+curl http://localhost:8585/actuator/metrics/incident.copilot.captures
+
+# Filter to a specific severity/category slice
+curl "http://localhost:8585/actuator/metrics/incident.copilot.captures?tag=severity:UNKNOWN&tag=category:UNKNOWN"
+```
+
+Only `metrics` is exposed (`management.endpoints.web.exposure.include: metrics`). No `health`, `env`, `beans`, or other endpoints are reachable, and no Actuator security is configured — this is a development and testing aid, not a production-grade observability surface.
+
+The integration tests (`IncidentCopilotIntegrationTest`, `MicrometerIncidentMetricsTest`, `ActuatorMetricsEndpointTest`) cover both the metric contract and its Actuator visibility on every `./mvnw test`.
 
 ## Current Limitations
 

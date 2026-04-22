@@ -1,4 +1,4 @@
-package com.incident.copilot.domain;
+package com.incident.copilot.core.domain;
 
 import java.util.List;
 

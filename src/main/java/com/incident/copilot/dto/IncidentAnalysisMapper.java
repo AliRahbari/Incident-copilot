@@ -1,8 +1,8 @@
 package com.incident.copilot.dto;
 
-import com.incident.copilot.domain.IncidentAnalysis;
-import com.incident.copilot.domain.IncidentObservation;
-import com.incident.copilot.domain.RecommendedAction;
+import com.incident.copilot.core.domain.IncidentAnalysis;
+import com.incident.copilot.core.domain.IncidentObservation;
+import com.incident.copilot.core.domain.RecommendedAction;
 
 /**
  * Converts the framework-agnostic {@link IncidentAnalysis} domain type into the

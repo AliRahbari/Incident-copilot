@@ -2,7 +2,7 @@ package com.incident.copilot.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.incident.copilot.exception.LlmClientException;
+import com.incident.copilot.core.exception.LlmClientException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

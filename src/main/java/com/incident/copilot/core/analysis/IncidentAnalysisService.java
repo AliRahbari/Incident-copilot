@@ -1,23 +1,21 @@
-package com.incident.copilot.service;
+package com.incident.copilot.core.analysis;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.incident.copilot.client.OpenAiClient;
-import com.incident.copilot.domain.IncidentAnalysis;
-import com.incident.copilot.domain.IncidentCategory;
-import com.incident.copilot.domain.IncidentInput;
-import com.incident.copilot.domain.IncidentObservation;
-import com.incident.copilot.domain.IncidentSeverity;
-import com.incident.copilot.domain.PossibleCause;
-import com.incident.copilot.domain.RecommendedAction;
-import com.incident.copilot.exception.LlmResponseException;
+import com.incident.copilot.core.domain.IncidentAnalysis;
+import com.incident.copilot.core.domain.IncidentCategory;
+import com.incident.copilot.core.domain.IncidentInput;
+import com.incident.copilot.core.domain.IncidentObservation;
+import com.incident.copilot.core.domain.IncidentSeverity;
+import com.incident.copilot.core.domain.PossibleCause;
+import com.incident.copilot.core.domain.RecommendedAction;
+import com.incident.copilot.core.exception.LlmResponseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-@Service
 public class IncidentAnalysisService {
 
     private static final Logger log = LoggerFactory.getLogger(IncidentAnalysisService.class);

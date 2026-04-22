@@ -1,4 +1,4 @@
-package com.incident.copilot.domain;
+package com.incident.copilot.core.domain;
 
 /**
  * A single concrete fact extracted from the incident input — e.g. an exception

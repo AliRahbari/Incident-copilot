@@ -1,4 +1,4 @@
-package com.incident.copilot.exception;
+package com.incident.copilot.core.exception;
 
 /**
  * Thrown when the OpenAI API call fails or returns an unusable response structure.

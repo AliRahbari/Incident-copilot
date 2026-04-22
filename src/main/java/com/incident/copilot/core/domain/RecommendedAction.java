@@ -1,4 +1,4 @@
-package com.incident.copilot.domain;
+package com.incident.copilot.core.domain;
 
 /**
  * A concrete follow-up step suggested by the analyzer (e.g. capture a heap dump,

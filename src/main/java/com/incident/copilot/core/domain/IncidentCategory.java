@@ -1,4 +1,4 @@
-package com.incident.copilot.domain;
+package com.incident.copilot.core.domain;
 
 /**
  * Coarse taxonomy of the failure mode. Deliberately small for MVP — just enough

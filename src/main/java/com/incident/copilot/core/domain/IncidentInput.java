@@ -1,4 +1,4 @@
-package com.incident.copilot.domain;
+package com.incident.copilot.core.domain;
 
 /**
  * Raw material handed to the incident analyzer: logs, stack traces, or free-form
