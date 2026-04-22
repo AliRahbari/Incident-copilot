@@ -1,7 +1,7 @@
 package com.incident.copilot.spring;
 
-import com.incident.copilot.domain.IncidentCategory;
-import com.incident.copilot.domain.IncidentSeverity;
+import com.incident.copilot.core.domain.IncidentCategory;
+import com.incident.copilot.core.domain.IncidentSeverity;
 
 /**
  * SPI for recording incident capture metrics. Kept intentionally narrow so the

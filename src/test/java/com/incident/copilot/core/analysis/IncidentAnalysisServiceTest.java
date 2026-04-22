@@ -1,12 +1,12 @@
-package com.incident.copilot.service;
+package com.incident.copilot.core.analysis;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.incident.copilot.client.OpenAiClient;
-import com.incident.copilot.domain.IncidentAnalysis;
-import com.incident.copilot.domain.IncidentCategory;
-import com.incident.copilot.domain.IncidentInput;
-import com.incident.copilot.domain.IncidentSeverity;
-import com.incident.copilot.exception.LlmResponseException;
+import com.incident.copilot.core.domain.IncidentAnalysis;
+import com.incident.copilot.core.domain.IncidentCategory;
+import com.incident.copilot.core.domain.IncidentInput;
+import com.incident.copilot.core.domain.IncidentSeverity;
+import com.incident.copilot.core.exception.LlmResponseException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

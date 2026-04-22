@@ -1,8 +1,8 @@
 package com.incident.copilot.spring;
 
-import com.incident.copilot.domain.IncidentAnalysis;
-import com.incident.copilot.domain.IncidentCategory;
-import com.incident.copilot.domain.IncidentSeverity;
+import com.incident.copilot.core.domain.IncidentAnalysis;
+import com.incident.copilot.core.domain.IncidentCategory;
+import com.incident.copilot.core.domain.IncidentSeverity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

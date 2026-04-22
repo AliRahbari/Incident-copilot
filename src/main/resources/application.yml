@@ -19,6 +19,12 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: metrics
+
 logging:
   level:
     com.incident.copilot: DEBUG

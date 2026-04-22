@@ -1,4 +1,4 @@
-package com.incident.copilot.domain;
+package com.incident.copilot.core.domain;
 
 /**
  * Qualitative severity of an analyzed incident. {@link #UNKNOWN} is used when the

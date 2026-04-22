@@ -1,8 +1,8 @@
 package com.incident.copilot.controller;
 
 import com.incident.copilot.dto.ErrorResponse;
-import com.incident.copilot.exception.LlmClientException;
-import com.incident.copilot.exception.LlmResponseException;
+import com.incident.copilot.core.exception.LlmClientException;
+import com.incident.copilot.core.exception.LlmResponseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;

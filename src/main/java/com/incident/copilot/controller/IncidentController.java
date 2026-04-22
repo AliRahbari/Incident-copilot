@@ -1,11 +1,11 @@
 package com.incident.copilot.controller;
 
-import com.incident.copilot.domain.IncidentAnalysis;
-import com.incident.copilot.domain.IncidentInput;
+import com.incident.copilot.core.analysis.IncidentAnalysisService;
+import com.incident.copilot.core.domain.IncidentAnalysis;
+import com.incident.copilot.core.domain.IncidentInput;
 import com.incident.copilot.dto.AnalyzeRequest;
 import com.incident.copilot.dto.AnalyzeResponse;
 import com.incident.copilot.dto.IncidentAnalysisMapper;
-import com.incident.copilot.service.IncidentAnalysisService;
 import com.incident.copilot.spring.IncidentSignalRecorder;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
