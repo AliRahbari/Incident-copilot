@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.servlet.HandlerExceptionResolver;
@@ -41,6 +42,7 @@ public class IncidentCopilotAutoConfiguration {
 
     @Bean
     @ConditionalOnClass(HandlerExceptionResolver.class)
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     @ConditionalOnProperty(prefix = "incident-copilot", name = "capture-exceptions", havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(IncidentExceptionCaptureResolver.class)
     public IncidentExceptionCaptureResolver incidentExceptionCaptureResolver(IncidentSignalRecorder recorder) {

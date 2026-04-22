@@ -1,5 +1,6 @@
 package com.incident.copilot.spring;
 
+import com.incident.copilot.controller.GlobalExceptionHandler;
 import com.incident.copilot.controller.IncidentController;
 import com.incident.copilot.domain.IncidentAnalysis;
 import com.incident.copilot.domain.IncidentCategory;
@@ -8,6 +9,7 @@ import com.incident.copilot.domain.IncidentObservation;
 import com.incident.copilot.domain.IncidentSeverity;
 import com.incident.copilot.domain.PossibleCause;
 import com.incident.copilot.domain.RecommendedAction;
+import com.incident.copilot.exception.LlmClientException;
 import com.incident.copilot.service.IncidentAnalysisService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -94,6 +96,30 @@ class IncidentCopilotIntegrationTest {
         // The resolver should have recorded the failure signal on its way
         // through, without swallowing the 400 response from the advice.
         // Throwable-based capture always tags severity=UNKNOWN, category=UNKNOWN.
+        assertThat(countWithUnknownTags()).isEqualTo(before + 1.0);
+    }
+
+    /**
+     * When the analysis service throws from inside the controller, the
+     * {@link GlobalExceptionHandler} advice must still produce the expected
+     * 5xx response, and the capture resolver must record the signal exactly
+     * once. This is the non-invasive guarantee on the real controller path.
+     */
+    @Test
+    void controllerThrows_adviceStillProducesResponse_andSignalIsRecordedOnce() throws Exception {
+        when(analysisService.analyze(any(IncidentInput.class)))
+                .thenThrow(new LlmClientException("upstream failed", new RuntimeException()));
+
+        double before = countWithUnknownTags();
+
+        mockMvc.perform(post("/analyze")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"input": "ERROR: connection pool exhausted"}
+                                """))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error").exists());
+
         assertThat(countWithUnknownTags()).isEqualTo(before + 1.0);
     }
 
