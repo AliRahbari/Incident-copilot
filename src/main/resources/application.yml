@@ -13,11 +13,6 @@ openai:
   connect-timeout-seconds: 5
   read-timeout-seconds: 30
 
-incident-copilot:
-  enabled: true
-  capture-exceptions: true
-  publish-metrics: true
-
 springdoc:
   api-docs:
     path: /v3/api-docs

@@ -205,11 +205,15 @@ When a `MeterRegistry` is available and metrics are enabled, a single Micrometer
 
 | Metric | Tags | Description |
 |--------|------|-------------|
-| `incident_copilot.captures` | `severity`, `category` | Incremented once per captured incident signal. |
+| `incident.copilot.captures` | `severity`, `category` | Incremented once per captured incident signal. |
 
 Tag values are the uppercase enum names of `IncidentSeverity` and `IncidentCategory`. Both tags are always present — if severity or category is unknown (for example, when the signal originates from a raw exception rather than a completed analysis), the value is `UNKNOWN`. Sum over tags gives the overall total; filtering by a single tag gives a per-severity or per-category breakdown.
 
 No Actuator dependency is required to emit these metrics — any Micrometer `MeterRegistry` bean on the classpath will do.
+
+#### Verifying metrics in development
+
+The integration tests (`IncidentCopilotIntegrationTest`, `MicrometerIncidentMetricsTest`) wire a `SimpleMeterRegistry` and assert the metric name and tag values, so the contract is exercised on every `./mvnw test`. To inspect metrics on a running instance, add `spring-boot-starter-actuator` to your own project and enable the `/actuator/metrics/incident.copilot.captures` endpoint — the starter itself deliberately does not pull Actuator in.
 
 ## Current Limitations
 

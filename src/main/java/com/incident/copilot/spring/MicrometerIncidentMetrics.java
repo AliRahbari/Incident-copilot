@@ -14,7 +14,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 public class MicrometerIncidentMetrics implements IncidentMetrics {
 
     /** Single counter for every captured incident signal. */
-    public static final String CAPTURES_METRIC = "incident_copilot.captures";
+    public static final String CAPTURES_METRIC = "incident.copilot.captures";
 
     /** Tag key carrying the {@link IncidentSeverity} of the captured signal. */
     public static final String TAG_SEVERITY = "severity";
