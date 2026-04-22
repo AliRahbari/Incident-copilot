@@ -1,7 +1,6 @@
 package com.incident.copilot.core.analysis;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.incident.copilot.client.OpenAiClient;
 import com.incident.copilot.core.domain.IncidentAnalysis;
 import com.incident.copilot.core.domain.IncidentCategory;
 import com.incident.copilot.core.domain.IncidentInput;
@@ -23,13 +22,13 @@ import static org.mockito.Mockito.when;
 class IncidentAnalysisServiceTest {
 
     @Mock
-    private OpenAiClient openAiClient;
+    private LlmClient llmClient;
 
     private IncidentAnalysisService service;
 
     @BeforeEach
     void setUp() {
-        service = new IncidentAnalysisService(openAiClient, new ObjectMapper());
+        service = new IncidentAnalysisService(llmClient, new ObjectMapper());
     }
 
     @Test
@@ -51,7 +50,7 @@ class IncidentAnalysisServiceTest {
                   "nextSteps": ["Capture heap dump with jmap -dump:live,format=b,file=heap.hprof <pid>"]
                 }
                 """;
-        when(openAiClient.chat(anyString(), anyString())).thenReturn(validJson);
+        when(llmClient.chat(anyString(), anyString())).thenReturn(validJson);
 
         IncidentAnalysis analysis = service.analyze(new IncidentInput("some error log"));
 
@@ -84,7 +83,7 @@ class IncidentAnalysisServiceTest {
                 }
                 ```
                 """;
-        when(openAiClient.chat(anyString(), anyString())).thenReturn(fencedJson);
+        when(llmClient.chat(anyString(), anyString())).thenReturn(fencedJson);
 
         IncidentAnalysis analysis = service.analyze(new IncidentInput("timeout error log"));
 
@@ -113,7 +112,7 @@ class IncidentAnalysisServiceTest {
                 }
                 ```
                 """;
-        when(openAiClient.chat(anyString(), anyString())).thenReturn(fencedJson);
+        when(llmClient.chat(anyString(), anyString())).thenReturn(fencedJson);
 
         IncidentAnalysis analysis = service.analyze(new IncidentInput("disk full error"));
 
@@ -141,7 +140,7 @@ class IncidentAnalysisServiceTest {
                   "nextSteps": ["Check pod health", "Review resource limits"]
                 }
                 """;
-        when(openAiClient.chat(anyString(), anyString())).thenReturn(json);
+        when(llmClient.chat(anyString(), anyString())).thenReturn(json);
 
         IncidentAnalysis analysis = service.analyze(new IncidentInput("some input"));
 
@@ -153,7 +152,7 @@ class IncidentAnalysisServiceTest {
 
     @Test
     void analyze_malformedJson_throwsLlmResponseException() {
-        when(openAiClient.chat(anyString(), anyString())).thenReturn("This is not JSON at all");
+        when(llmClient.chat(anyString(), anyString())).thenReturn("This is not JSON at all");
 
         assertThrows(LlmResponseException.class,
                 () -> service.analyze(new IncidentInput("some input")));
@@ -161,7 +160,7 @@ class IncidentAnalysisServiceTest {
 
     @Test
     void analyze_incompleteJson_throwsLlmResponseException() {
-        when(openAiClient.chat(anyString(), anyString())).thenReturn("{\"summary\": ");
+        when(llmClient.chat(anyString(), anyString())).thenReturn("{\"summary\": ");
 
         assertThrows(LlmResponseException.class,
                 () -> service.analyze(new IncidentInput("some input")));

@@ -2,7 +2,6 @@ package com.incident.copilot.core.analysis;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.incident.copilot.client.OpenAiClient;
 import com.incident.copilot.core.domain.IncidentAnalysis;
 import com.incident.copilot.core.domain.IncidentCategory;
 import com.incident.copilot.core.domain.IncidentInput;
@@ -129,11 +128,11 @@ public class IncidentAnalysisService {
             rather than "investigate the issue".
             """;
 
-    private final OpenAiClient openAiClient;
+    private final LlmClient llmClient;
     private final ObjectMapper objectMapper;
 
-    public IncidentAnalysisService(OpenAiClient openAiClient, ObjectMapper objectMapper) {
-        this.openAiClient = openAiClient;
+    public IncidentAnalysisService(LlmClient llmClient, ObjectMapper objectMapper) {
+        this.llmClient = llmClient;
         this.objectMapper = objectMapper;
     }
 
@@ -145,7 +144,7 @@ public class IncidentAnalysisService {
     public IncidentAnalysis analyze(IncidentInput input) {
         log.info("Analyzing input ({} chars)", input.content().length());
 
-        String rawResponse = openAiClient.chat(SYSTEM_PROMPT, input.content());
+        String rawResponse = llmClient.chat(SYSTEM_PROMPT, input.content());
         String json = stripMarkdownFences(rawResponse);
 
         LlmAnalysisResponse parsed;
