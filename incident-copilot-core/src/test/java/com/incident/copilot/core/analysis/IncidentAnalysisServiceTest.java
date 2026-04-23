@@ -55,8 +55,9 @@ class IncidentAnalysisServiceTest {
         IncidentAnalysis analysis = service.analyze(new IncidentInput("some error log"));
 
         assertEquals("OOM in pod-xyz", analysis.summary());
-        assertEquals(IncidentSeverity.UNKNOWN, analysis.severity());
-        assertEquals(IncidentCategory.UNKNOWN, analysis.category());
+        // The LLM output mentions OutOfMemoryError / heap, so the classifier tags it MEMORY.
+        assertEquals(IncidentCategory.MEMORY, analysis.category());
+        assertEquals(IncidentSeverity.HIGH, analysis.severity());
         assertEquals(2, analysis.observations().size());
         assertEquals("java.lang.OutOfMemoryError at line 42", analysis.observations().get(0).description());
         assertEquals(1, analysis.possibleCauses().size());
@@ -148,6 +149,41 @@ class IncidentAnalysisServiceTest {
         assertEquals("high", analysis.possibleCauses().get(0).confidence());
         assertEquals("low", analysis.possibleCauses().get(1).confidence());
         assertEquals(2, analysis.possibleCauses().get(0).evidence().size());
+    }
+
+    @Test
+    void analyze_networkIncident_isClassifiedAsNetwork() {
+        String networkJson = """
+                {
+                  "summary": "Connection refused to payment upstream",
+                  "observations": ["java.net.ConnectException: Connection refused"],
+                  "possibleCauses": [],
+                  "nextSteps": []
+                }
+                """;
+        when(llmClient.chat(anyString(), anyString())).thenReturn(networkJson);
+
+        IncidentAnalysis analysis = service.analyze(new IncidentInput("upstream error"));
+
+        assertEquals(IncidentCategory.NETWORK, analysis.category());
+    }
+
+    @Test
+    void analyze_contentWithNoRecognizableKeywords_fallsBackToUnknown() {
+        String bland = """
+                {
+                  "summary": "lorem ipsum",
+                  "observations": ["nothing to see here"],
+                  "possibleCauses": [],
+                  "nextSteps": []
+                }
+                """;
+        when(llmClient.chat(anyString(), anyString())).thenReturn(bland);
+
+        IncidentAnalysis analysis = service.analyze(new IncidentInput("bland input"));
+
+        assertEquals(IncidentCategory.UNKNOWN, analysis.category());
+        assertEquals(IncidentSeverity.UNKNOWN, analysis.severity());
     }
 
     @Test

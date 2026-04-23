@@ -1,5 +1,6 @@
 package com.incident.copilot.spring;
 
+import com.incident.copilot.core.analysis.IncidentClassifier;
 import com.incident.copilot.core.domain.IncidentAnalysis;
 import com.incident.copilot.core.domain.IncidentCategory;
 import com.incident.copilot.core.domain.IncidentObservation;
@@ -8,6 +9,8 @@ import com.incident.copilot.core.domain.PossibleCause;
 import com.incident.copilot.core.domain.RecommendedAction;
 import org.junit.jupiter.api.Test;
 
+import java.net.ConnectException;
+import java.sql.SQLException;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -20,14 +23,16 @@ import static org.mockito.Mockito.verifyNoInteractions;
 /**
  * Unit tests for {@link IncidentSignalRecorder}. Pins down:
  *  - analysis capture forwards severity/category to the metrics SPI
- *  - throwable capture always tags UNKNOWN/UNKNOWN
+ *  - throwable capture is classified via {@link IncidentClassifier} so metrics
+ *    get meaningful tags rather than UNKNOWN/UNKNOWN
  *  - null inputs are silently ignored
  *  - failures in the metrics backend never propagate (non-invasive guarantee)
  */
 class IncidentSignalRecorderTest {
 
     private final IncidentMetrics metrics = mock(IncidentMetrics.class);
-    private final IncidentSignalRecorder recorder = new IncidentSignalRecorder(metrics);
+    private final IncidentSignalRecorder recorder =
+            new IncidentSignalRecorder(metrics, new IncidentClassifier());
 
     @Test
     void capture_analysis_forwardsSeverityAndCategory() {
@@ -37,10 +42,31 @@ class IncidentSignalRecorderTest {
     }
 
     @Test
-    void capture_throwable_alwaysRecordsUnknownUnknown() {
+    void capture_sqlException_isTaggedAsDatabase() {
+        recorder.capture(new SQLException("duplicate key"));
+
+        verify(metrics).recordCaptured(eq(IncidentSeverity.HIGH), eq(IncidentCategory.DATABASE));
+    }
+
+    @Test
+    void capture_connectException_isTaggedAsNetwork() {
+        recorder.capture(new ConnectException("connection refused"));
+
+        verify(metrics).recordCaptured(eq(IncidentSeverity.HIGH), eq(IncidentCategory.NETWORK));
+    }
+
+    @Test
+    void capture_outOfMemory_isTaggedAsCriticalMemory() {
+        recorder.capture(new OutOfMemoryError("Java heap space"));
+
+        verify(metrics).recordCaptured(eq(IncidentSeverity.CRITICAL), eq(IncidentCategory.MEMORY));
+    }
+
+    @Test
+    void capture_unknownThrowable_fallsBackToMediumUnknown() {
         recorder.capture(new RuntimeException("boom"));
 
-        verify(metrics).recordCaptured(eq(IncidentSeverity.UNKNOWN), eq(IncidentCategory.UNKNOWN));
+        verify(metrics).recordCaptured(eq(IncidentSeverity.MEDIUM), eq(IncidentCategory.UNKNOWN));
     }
 
     @Test
@@ -71,11 +97,11 @@ class IncidentSignalRecorderTest {
     @Test
     void capture_throwableWhenMetricsBackendThrows_isSwallowed() {
         doThrow(new RuntimeException("registry offline"))
-                .when(metrics).recordCaptured(eq(IncidentSeverity.UNKNOWN), eq(IncidentCategory.UNKNOWN));
+                .when(metrics).recordCaptured(eq(IncidentSeverity.MEDIUM), eq(IncidentCategory.UNKNOWN));
 
         recorder.capture(new IllegalStateException("x"));
 
-        verify(metrics).recordCaptured(eq(IncidentSeverity.UNKNOWN), eq(IncidentCategory.UNKNOWN));
+        verify(metrics).recordCaptured(eq(IncidentSeverity.MEDIUM), eq(IncidentCategory.UNKNOWN));
         verify(metrics, never()).recordCaptured(eq(IncidentSeverity.HIGH), eq(IncidentCategory.DATABASE));
     }
 

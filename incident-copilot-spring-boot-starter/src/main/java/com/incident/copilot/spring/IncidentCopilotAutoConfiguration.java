@@ -2,6 +2,7 @@ package com.incident.copilot.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.incident.copilot.core.analysis.IncidentAnalysisService;
+import com.incident.copilot.core.analysis.IncidentClassifier;
 import com.incident.copilot.core.analysis.LlmClient;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -24,11 +25,18 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 public class IncidentCopilotAutoConfiguration {
 
     @Bean
+    @ConditionalOnMissingBean
+    public IncidentClassifier incidentClassifier() {
+        return new IncidentClassifier();
+    }
+
+    @Bean
     @ConditionalOnBean(LlmClient.class)
     @ConditionalOnMissingBean
     public IncidentAnalysisService incidentAnalysisService(LlmClient llmClient,
-                                                           ObjectMapper objectMapper) {
-        return new IncidentAnalysisService(llmClient, objectMapper);
+                                                           ObjectMapper objectMapper,
+                                                           IncidentClassifier classifier) {
+        return new IncidentAnalysisService(llmClient, objectMapper, classifier);
     }
 
     @Bean
@@ -48,8 +56,9 @@ public class IncidentCopilotAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public IncidentSignalRecorder incidentSignalRecorder(IncidentMetrics metrics) {
-        return new IncidentSignalRecorder(metrics);
+    public IncidentSignalRecorder incidentSignalRecorder(IncidentMetrics metrics,
+                                                         IncidentClassifier classifier) {
+        return new IncidentSignalRecorder(metrics, classifier);
     }
 
     @Bean
