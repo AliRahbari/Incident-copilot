@@ -66,11 +66,11 @@ class IncidentCopilotIntegrationTest {
     }
 
     @Test
-    void validJson_happyPath_incrementsCaptureCounterWithUnknownTags() throws Exception {
+    void validJson_happyPath_incrementsCaptureCounter() throws Exception {
         when(analysisService.analyze(any(IncidentInput.class)))
                 .thenReturn(sampleAnalysis());
 
-        double before = countWithUnknownTags();
+        double before = totalCaptureCount();
 
         mockMvc.perform(post("/analyze")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -80,12 +80,12 @@ class IncidentCopilotIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.summary").exists());
 
-        assertThat(countWithUnknownTags()).isEqualTo(before + 1.0);
+        assertThat(totalCaptureCount()).isEqualTo(before + 1.0);
     }
 
     @Test
     void malformedJson_returns400_andExceptionCaptureDoesNotBreakResponse() throws Exception {
-        double before = countWithUnknownTags();
+        double before = totalCaptureCount();
 
         mockMvc.perform(post("/analyze")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -94,9 +94,10 @@ class IncidentCopilotIntegrationTest {
                 .andExpect(jsonPath("$.error").exists());
 
         // The resolver should have recorded the failure signal on its way
-        // through, without swallowing the 400 response from the advice.
-        // Throwable-based capture always tags severity=UNKNOWN, category=UNKNOWN.
-        assertThat(countWithUnknownTags()).isEqualTo(before + 1.0);
+        // through, without swallowing the 400 response from the advice. The
+        // exact severity/category tags are set by the classifier — here we
+        // only pin down that a signal was recorded.
+        assertThat(totalCaptureCount()).isEqualTo(before + 1.0);
     }
 
     /**
@@ -110,7 +111,7 @@ class IncidentCopilotIntegrationTest {
         when(analysisService.analyze(any(IncidentInput.class)))
                 .thenThrow(new LlmClientException("upstream failed", new RuntimeException()));
 
-        double before = countWithUnknownTags();
+        double before = totalCaptureCount();
 
         mockMvc.perform(post("/analyze")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -120,15 +121,14 @@ class IncidentCopilotIntegrationTest {
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.error").exists());
 
-        assertThat(countWithUnknownTags()).isEqualTo(before + 1.0);
+        assertThat(totalCaptureCount()).isEqualTo(before + 1.0);
     }
 
-    private double countWithUnknownTags() {
-        Counter counter = meterRegistry.find(MicrometerIncidentMetrics.CAPTURES_METRIC)
-                .tag(MicrometerIncidentMetrics.TAG_SEVERITY, IncidentSeverity.UNKNOWN.name())
-                .tag(MicrometerIncidentMetrics.TAG_CATEGORY, IncidentCategory.UNKNOWN.name())
-                .counter();
-        return counter == null ? 0.0 : counter.count();
+    private double totalCaptureCount() {
+        return meterRegistry.find(MicrometerIncidentMetrics.CAPTURES_METRIC)
+                .counters().stream()
+                .mapToDouble(Counter::count)
+                .sum();
     }
 
     private static IncidentAnalysis sampleAnalysis() {

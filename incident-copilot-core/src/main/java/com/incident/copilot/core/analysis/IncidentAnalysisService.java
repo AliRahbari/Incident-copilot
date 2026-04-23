@@ -3,10 +3,8 @@ package com.incident.copilot.core.analysis;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.incident.copilot.core.domain.IncidentAnalysis;
-import com.incident.copilot.core.domain.IncidentCategory;
 import com.incident.copilot.core.domain.IncidentInput;
 import com.incident.copilot.core.domain.IncidentObservation;
-import com.incident.copilot.core.domain.IncidentSeverity;
 import com.incident.copilot.core.domain.PossibleCause;
 import com.incident.copilot.core.domain.RecommendedAction;
 import com.incident.copilot.core.exception.LlmResponseException;
@@ -130,16 +128,25 @@ public class IncidentAnalysisService {
 
     private final LlmClient llmClient;
     private final ObjectMapper objectMapper;
+    private final IncidentClassifier classifier;
 
     public IncidentAnalysisService(LlmClient llmClient, ObjectMapper objectMapper) {
+        this(llmClient, objectMapper, new IncidentClassifier());
+    }
+
+    public IncidentAnalysisService(LlmClient llmClient,
+                                   ObjectMapper objectMapper,
+                                   IncidentClassifier classifier) {
         this.llmClient = llmClient;
         this.objectMapper = objectMapper;
+        this.classifier = classifier;
     }
 
     /**
      * Analyze an incident and return a framework-agnostic {@link IncidentAnalysis}.
-     * Severity and category are emitted as {@code UNKNOWN} in Phase 1 — the
-     * concepts exist on the domain but the LLM prompt does not yet populate them.
+     * Severity and category are derived from the LLM's textual output via the
+     * configured {@link IncidentClassifier}, falling back to {@code UNKNOWN}
+     * when no rule matches.
      */
     public IncidentAnalysis analyze(IncidentInput input) {
         log.info("Analyzing input ({} chars)", input.content().length());
@@ -155,10 +162,10 @@ public class IncidentAnalysisService {
             throw new LlmResponseException("Failed to parse LLM response into structured format", e);
         }
 
-        return toDomain(parsed);
+        return toDomain(parsed, classifier);
     }
 
-    private static IncidentAnalysis toDomain(LlmAnalysisResponse llm) {
+    private static IncidentAnalysis toDomain(LlmAnalysisResponse llm, IncidentClassifier classifier) {
         List<IncidentObservation> observations = llm.observations() == null
                 ? List.of()
                 : llm.observations().stream()
@@ -179,14 +186,27 @@ public class IncidentAnalysisService {
                         .map(RecommendedAction::new)
                         .toList();
 
+        Classification classification = classifier.classify(classificationText(llm, observations));
+
         return new IncidentAnalysis(
                 llm.summary(),
-                IncidentSeverity.UNKNOWN,
-                IncidentCategory.UNKNOWN,
+                classification.severity(),
+                classification.category(),
                 observations,
                 causes,
                 actions
         );
+    }
+
+    private static String classificationText(LlmAnalysisResponse llm, List<IncidentObservation> observations) {
+        StringBuilder sb = new StringBuilder();
+        if (llm.summary() != null) {
+            sb.append(llm.summary()).append('\n');
+        }
+        for (IncidentObservation obs : observations) {
+            sb.append(obs.description()).append('\n');
+        }
+        return sb.toString();
     }
 
     /**

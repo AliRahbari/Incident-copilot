@@ -312,7 +312,32 @@ When a `MeterRegistry` is available and metrics are enabled, a single Micrometer
 |--------|------|-------------|
 | `incident.copilot.captures` | `severity`, `category` | Incremented once per captured incident signal. |
 
-Tag values are the uppercase enum names of `IncidentSeverity` and `IncidentCategory`. Both tags are always present — if severity or category is unknown (for example, when the signal originates from a raw exception rather than a completed analysis), the value is `UNKNOWN`. Sum over tags gives the overall total; filtering by a single tag gives a per-severity or per-category breakdown.
+Tag values are the uppercase enum names of `IncidentSeverity` and `IncidentCategory`. Both tags are always present; when no rule matches the value is `UNKNOWN`. Sum over tags gives the overall total; filtering by a single tag gives a per-severity or per-category breakdown.
+
+#### Classification
+
+Both capture paths (completed analyses and raw exceptions caught by `IncidentExceptionCaptureResolver`) run through a lightweight rule-based `IncidentClassifier` before hitting metrics, so `severity` and `category` tags are no longer mostly `UNKNOWN` for common scenarios.
+
+The taxonomy is deliberately small:
+
+- **`IncidentCategory`**: `MEMORY`, `CONCURRENCY`, `IO`, `NETWORK`, `DATABASE`, `CONFIGURATION`, `STARTUP`, `UNKNOWN`
+- **`IncidentSeverity`**: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`, `UNKNOWN`
+
+Rules (no DSL, no external config, no ML):
+
+- **Exceptions** — the cause chain is walked and matched against JDK / Spring / JPA types: `OutOfMemoryError` → `MEMORY/CRITICAL`, `SQLException` → `DATABASE/HIGH`, `ConnectException`/`UnknownHostException`/`SocketTimeoutException` → `NETWORK/HIGH`, `TimeoutException`/`InterruptedException` → `CONCURRENCY/MEDIUM`, `IOException` → `IO/MEDIUM`, Spring `BeanCreationException` → `CONFIGURATION/HIGH`, etc. Unmatched throwables fall back to `MEDIUM/UNKNOWN`.
+- **Analysis text** — the LLM summary + observations are scanned for category keywords (`heap`, `deadlock`, `connection refused`, `jdbc`, `bean`, `context refresh`, …) and severity keywords (`critical`/`fatal`/`outage` → `CRITICAL`, `error`/`exception`/`failed` → `HIGH`, `degraded`/`slow`/`latency` → `MEDIUM`).
+
+To extend or replace the logic, contribute your own `IncidentClassifier` bean — the starter registers a default via `@ConditionalOnMissingBean`, so your implementation simply wins:
+
+```java
+@Bean
+IncidentClassifier myIncidentClassifier() {
+    return new MyCustomClassifier();
+}
+```
+
+This is intentionally minimal; it is not a replacement for proper alerting logic, and `UNKNOWN` remains a valid outcome by design when no rule matches.
 
 The capture code path does not require Actuator — any Micrometer `MeterRegistry` bean is enough to emit. Actuator is pulled in by the application so the metric can be *inspected* over HTTP (see below). The starter itself does not force Actuator on its consumers.
 
@@ -365,7 +390,7 @@ This is an MVP. Key limitations:
 ## Future Ideas
 
 - Batch analysis for multiple log files
-- Incident severity classification
+- Richer incident classification (beyond the current rule-based first pass)
 - Integration with alerting tools (PagerDuty, Opsgenie)
 - Slack/Teams bot interface
 - Historical incident pattern matching with a vector store

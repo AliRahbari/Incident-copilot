@@ -2,6 +2,7 @@ package com.incident.copilot.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.incident.copilot.core.analysis.IncidentAnalysisService;
+import com.incident.copilot.core.analysis.IncidentClassifier;
 import com.incident.copilot.core.analysis.LlmClient;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -114,6 +115,18 @@ class IncidentCopilotAutoConfigurationTest {
                         JacksonAutoConfiguration.class,
                         IncidentCopilotAutoConfiguration.class))
                 .run(ctx -> assertThat(ctx).doesNotHaveBean(IncidentAnalysisService.class));
+    }
+
+    @Test
+    void defaults_wireIncidentClassifier() {
+        runner.run(ctx -> assertThat(ctx).hasSingleBean(IncidentClassifier.class));
+    }
+
+    @Test
+    void consumerProvidedClassifier_winsOverStarter() {
+        IncidentClassifier custom = new IncidentClassifier();
+        runner.withBean(IncidentClassifier.class, () -> custom)
+                .run(ctx -> assertThat(ctx.getBean(IncidentClassifier.class)).isSameAs(custom));
     }
 
     @Test
