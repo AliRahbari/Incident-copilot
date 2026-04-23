@@ -1,15 +1,20 @@
 package com.incident.copilot.spring;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.incident.copilot.core.analysis.IncidentAnalysisService;
+import com.incident.copilot.core.analysis.LlmClient;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * Pins down the conditional bean wiring of {@link IncidentCopilotAutoConfiguration}
@@ -92,11 +97,50 @@ class IncidentCopilotAutoConfigurationTest {
                 });
     }
 
+    @Test
+    void withLlmClientAndObjectMapper_wiresIncidentAnalysisService() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        JacksonAutoConfiguration.class,
+                        IncidentCopilotAutoConfiguration.class))
+                .withUserConfiguration(LlmClientConfig.class)
+                .run(ctx -> assertThat(ctx).hasSingleBean(IncidentAnalysisService.class));
+    }
+
+    @Test
+    void withoutLlmClient_doesNotWireIncidentAnalysisService() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        JacksonAutoConfiguration.class,
+                        IncidentCopilotAutoConfiguration.class))
+                .run(ctx -> assertThat(ctx).doesNotHaveBean(IncidentAnalysisService.class));
+    }
+
+    @Test
+    void consumerProvidedIncidentAnalysisService_winsOverStarter() {
+        IncidentAnalysisService custom = new IncidentAnalysisService(mock(LlmClient.class), new ObjectMapper());
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        JacksonAutoConfiguration.class,
+                        IncidentCopilotAutoConfiguration.class))
+                .withUserConfiguration(LlmClientConfig.class)
+                .withBean(IncidentAnalysisService.class, () -> custom)
+                .run(ctx -> assertThat(ctx.getBean(IncidentAnalysisService.class)).isSameAs(custom));
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class MeterRegistryConfig {
         @Bean
         MeterRegistry meterRegistry() {
             return new SimpleMeterRegistry();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class LlmClientConfig {
+        @Bean
+        LlmClient llmClient() {
+            return (system, user) -> "{}";
         }
     }
 }
