@@ -47,43 +47,55 @@ The build is a Maven multi-module project with an aggregator POM at the root:
 
 ```
 .
-├── pom.xml                                # Aggregator / parent POM (packaging=pom)
-├── incident-copilot-core/                 # Framework-agnostic domain + analysis logic
+├── pom.xml                                  # Aggregator / parent POM (packaging=pom)
+├── incident-copilot-core/                   # Framework-agnostic domain + analysis logic
 │   └── src/main/java/com/incident/copilot/core/
-│       ├── domain/                        # Records + enums (IncidentInput, IncidentAnalysis, ...)
+│       ├── domain/                          # Records + enums (IncidentInput, IncidentAnalysis, ...)
 │       ├── analysis/
-│       │   ├── IncidentAnalysisService.java  # Plain Java analyzer (no Spring annotations)
-│       │   └── LlmClient.java                # LLM client abstraction
-│       └── exception/                     # Domain-level exceptions (LlmClientException, ...)
-└── incident-copilot-app/                  # Spring Boot application — REST API + wiring
+│       │   ├── IncidentAnalysisService.java # Plain Java analyzer (no Spring annotations)
+│       │   └── LlmClient.java               # LLM client abstraction
+│       └── exception/                       # Domain-level exceptions (LlmClientException, ...)
+├── incident-copilot-spring-boot-starter/    # Reusable Spring Boot auto-configuration
+│   └── src/main/java/com/incident/copilot/spring/
+│       ├── IncidentCopilotAutoConfiguration.java
+│       ├── IncidentCopilotProperties.java
+│       ├── IncidentSignalRecorder.java
+│       ├── IncidentMetrics.java / MicrometerIncidentMetrics.java
+│       └── IncidentExceptionCaptureResolver.java
+└── incident-copilot-app/                    # Spring Boot application — REST API + wiring
     └── src/main/java/com/incident/copilot/
-        ├── IncidentCopilotApplication.java   # Entry point
-        ├── spring/                        # Spring auto-configuration
-        │   ├── IncidentCopilotAutoConfiguration.java
-        │   ├── IncidentCopilotProperties.java
-        │   ├── IncidentSignalRecorder.java
-        │   ├── IncidentMetrics.java / MicrometerIncidentMetrics.java
-        │   └── IncidentExceptionCaptureResolver.java
+        ├── IncidentCopilotApplication.java  # Entry point
         ├── client/
-        │   └── OpenAiClient.java          # OpenAI API client with timeouts
+        │   └── OpenAiClient.java            # OpenAI API client with timeouts (implements LlmClient)
         ├── controller/
-        │   ├── IncidentController.java    # POST /analyze endpoint
-        │   └── GlobalExceptionHandler.java # Centralized error handling
+        │   ├── IncidentController.java      # POST /analyze endpoint
+        │   └── GlobalExceptionHandler.java  # Centralized error handling
         ├── dto/
-        │   ├── AnalyzeRequest.java        # Request validation
-        │   ├── AnalyzeResponse.java       # Response structure
-        │   ├── PossibleCause.java         # Cause with confidence + evidence
-        │   ├── ErrorResponse.java         # Error response structure
-        │   └── IncidentAnalysisMapper.java # Domain → wire mapping
+        │   ├── AnalyzeRequest.java          # Request validation
+        │   ├── AnalyzeResponse.java         # Response structure
+        │   ├── PossibleCause.java           # Cause with confidence + evidence
+        │   ├── ErrorResponse.java           # Error response structure
+        │   └── IncidentAnalysisMapper.java  # Domain → wire mapping
         └── config/
-            ├── OpenApiConfig.java         # springdoc
-            └── CoreBeansConfiguration.java # Wires core analyzer as a Spring bean
+            └── OpenApiConfig.java           # springdoc
 ```
 
 ### What belongs where
 
 - **`incident-copilot-core`** — pure Java, no Spring dependency. Holds the domain model (records, enums), the `IncidentAnalysisService` analyzer, the `LlmClient` abstraction, and domain-level exceptions. Publishable as a plain library.
-- **`incident-copilot-app`** — the runnable Spring Boot application. Depends on `incident-copilot-core` and adds the REST controller, DTOs and wire mapping, the OpenAI `LlmClient` implementation, the Spring auto-configuration / properties / metrics / exception-capture beans, and the Spring Boot entry point.
+- **`incident-copilot-spring-boot-starter`** — reusable auto-configuration. Given a `LlmClient` bean, it wires an `IncidentAnalysisService` plus the signal-capture surface (`IncidentSignalRecorder`, `IncidentMetrics`, MVC `IncidentExceptionCaptureResolver`). All dependencies on Micrometer, Spring Web, and the Servlet API are `<optional>true</optional>` — they only activate when the consuming app already has them. Exposes a single `incident-copilot.*` properties namespace.
+- **`incident-copilot-app`** — the runnable Spring Boot application. Provides product-specific pieces only: the entry point, the REST controller and DTOs, the `OpenAiClient` implementation of `LlmClient`, global error handling, and the springdoc config. It owns no Spring integration plumbing — everything else is delivered by the starter.
+
+### What a consuming app gets for free
+
+Adding the starter as a dependency and providing a `LlmClient` bean is enough to get:
+
+- a ready `IncidentAnalysisService` bean (wired against your `LlmClient` and the app's `ObjectMapper`)
+- an `IncidentSignalRecorder` for explicit captures from application code
+- Micrometer counter publication when a `MeterRegistry` is on the classpath
+- a non-invasive `HandlerExceptionResolver` for MVC apps that records a signal per thrown exception without altering the response
+
+Every bean uses `@ConditionalOnMissingBean`, so any of these can be replaced by the consuming app.
 
 ## Getting Started
 
@@ -220,7 +232,7 @@ Content-Type: application/json
 
 ## Spring integration & metrics
 
-The service ships with a small Spring auto-configuration layer (under `com.incident.copilot.spring` in the `incident-copilot-app` module).
+The Spring integration lives in the reusable `incident-copilot-spring-boot-starter` module (package `com.incident.copilot.spring`). The app consumes it as a dependency and adds no integration code of its own.
 
 ### Configuration properties
 
@@ -242,7 +254,7 @@ When a `MeterRegistry` is available and metrics are enabled, a single Micrometer
 
 Tag values are the uppercase enum names of `IncidentSeverity` and `IncidentCategory`. Both tags are always present — if severity or category is unknown (for example, when the signal originates from a raw exception rather than a completed analysis), the value is `UNKNOWN`. Sum over tags gives the overall total; filtering by a single tag gives a per-severity or per-category breakdown.
 
-The capture code path does not require Actuator — any Micrometer `MeterRegistry` bean is enough to emit. Actuator is pulled in by the application so the metric can be *inspected* over HTTP (see below). A future extracted `incident-copilot-spring-boot-starter` will not force Actuator on its consumers.
+The capture code path does not require Actuator — any Micrometer `MeterRegistry` bean is enough to emit. Actuator is pulled in by the application so the metric can be *inspected* over HTTP (see below). The starter itself does not force Actuator on its consumers.
 
 #### Inspecting metrics via Actuator
 

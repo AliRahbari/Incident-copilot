@@ -1,5 +1,8 @@
 package com.incident.copilot.spring;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.incident.copilot.core.analysis.IncidentAnalysisService;
+import com.incident.copilot.core.analysis.LlmClient;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -13,11 +16,20 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 
 @AutoConfiguration(afterName = {
         "org.springframework.boot.actuate.autoconfigure.metrics.CompositeMeterRegistryAutoConfiguration",
-        "org.springframework.boot.actuate.autoconfigure.metrics.MetricsAutoConfiguration"
+        "org.springframework.boot.actuate.autoconfigure.metrics.MetricsAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration"
 })
 @EnableConfigurationProperties(IncidentCopilotProperties.class)
 @ConditionalOnProperty(prefix = "incident-copilot", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class IncidentCopilotAutoConfiguration {
+
+    @Bean
+    @ConditionalOnBean(LlmClient.class)
+    @ConditionalOnMissingBean
+    public IncidentAnalysisService incidentAnalysisService(LlmClient llmClient,
+                                                           ObjectMapper objectMapper) {
+        return new IncidentAnalysisService(llmClient, objectMapper);
+    }
 
     @Bean
     @ConditionalOnClass(MeterRegistry.class)
