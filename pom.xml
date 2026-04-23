@@ -20,6 +20,7 @@
 
     <modules>
         <module>incident-copilot-core</module>
+        <module>incident-copilot-spring-boot-starter</module>
         <module>incident-copilot-app</module>
     </modules>
 
@@ -33,6 +34,11 @@
             <dependency>
                 <groupId>com.incident</groupId>
                 <artifactId>incident-copilot-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.incident</groupId>
+                <artifactId>incident-copilot-spring-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
