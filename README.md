@@ -97,6 +97,66 @@ Adding the starter as a dependency and providing a `LlmClient` bean is enough to
 
 Every bean uses `@ConditionalOnMissingBean`, so any of these can be replaced by the consuming app.
 
+### Using the starter in another Spring Boot application
+
+The starter is a standard Spring Boot 3 auto-configuration — it is picked up from `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`. There is no `@EnableIncidentCopilot` or manual `@Import` to add. A minimal consumer only has to do three things:
+
+**1. Add the dependency**
+
+```xml
+<dependency>
+    <groupId>com.incident</groupId>
+    <artifactId>incident-copilot-spring-boot-starter</artifactId>
+    <version>0.1.0</version>
+</dependency>
+```
+
+**2. Provide a `LlmClient` bean** — this is the only bean the starter expects the consuming app to contribute, because the choice of LLM provider belongs to the application, not the library:
+
+```java
+@Configuration
+class LlmConfig {
+
+    @Bean
+    LlmClient llmClient() {
+        return (systemPrompt, userMessage) -> {
+            // call your LLM provider here and return the raw assistant response
+            return "...";
+        };
+    }
+}
+```
+
+**3. (Optional) Override defaults via `application.yml`:**
+
+```yaml
+incident-copilot:
+  enabled: true               # master switch (default: true)
+  publish-metrics: true       # emit Micrometer counters (default: true)
+  capture-exceptions: true    # install MVC exception resolver (default: true)
+```
+
+Once the starter is on the classpath and a `LlmClient` is available, the following beans are auto-wired:
+
+| Bean | Condition | Can the app override? |
+|------|-----------|-----------------------|
+| `IncidentAnalysisService` | `LlmClient` bean present | Yes (`@ConditionalOnMissingBean`) |
+| `IncidentSignalRecorder` | always | Yes |
+| `IncidentMetrics` → `MicrometerIncidentMetrics` | `MeterRegistry` bean on classpath + `publish-metrics=true` | Yes |
+| `IncidentMetrics` → `NoOpIncidentMetrics` | no `MeterRegistry` or `publish-metrics=false` | Yes |
+| `IncidentExceptionCaptureResolver` | servlet web app + `capture-exceptions=true` | Yes |
+
+**What remains app-specific** (the starter deliberately does not ship these):
+
+- the `LlmClient` implementation (OpenAI, Anthropic, Bedrock, a local model, a mock for tests, …)
+- any REST controllers or HTTP surface that calls `IncidentAnalysisService`
+- request/response DTOs and domain → wire mapping
+- global exception handling / `@ControllerAdvice`
+- `MeterRegistry` wiring (typically via `spring-boot-starter-actuator`), if you want the Micrometer path rather than the no-op
+- the OpenAPI / springdoc configuration, if any
+
+Micrometer, Spring Web, and the Servlet API are declared as `<optional>true</optional>` on the starter, so a non-web or non-metrics application pulls in no extra transitive classes and simply gets the no-op / servlet-skipped paths.
+
 ## Getting Started
 
 ### Prerequisites
