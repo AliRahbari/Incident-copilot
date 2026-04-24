@@ -7,12 +7,19 @@ import com.incident.copilot.core.domain.IncidentObservation;
 import com.incident.copilot.core.domain.IncidentSeverity;
 import com.incident.copilot.core.domain.PossibleCause;
 import com.incident.copilot.core.domain.RecommendedAction;
+import com.incident.copilot.core.sink.IncidentSignal;
+import com.incident.copilot.core.sink.IncidentSink;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.net.ConnectException;
 import java.sql.SQLException;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -103,6 +110,85 @@ class IncidentSignalRecorderTest {
 
         verify(metrics).recordCaptured(eq(IncidentSeverity.MEDIUM), eq(IncidentCategory.UNKNOWN));
         verify(metrics, never()).recordCaptured(eq(IncidentSeverity.HIGH), eq(IncidentCategory.DATABASE));
+    }
+
+    @Test
+    void capture_analysis_fansOutToSinkWithSignal() {
+        IncidentSink sink = mock(IncidentSink.class);
+        IncidentSignalRecorder r = new IncidentSignalRecorder(
+                metrics, new IncidentClassifier(), List.of(sink));
+
+        IncidentAnalysis analysis = analysisWith(IncidentSeverity.HIGH, IncidentCategory.DATABASE);
+        r.capture(analysis);
+
+        ArgumentCaptor<IncidentSignal> captor = ArgumentCaptor.forClass(IncidentSignal.class);
+        verify(sink).accept(captor.capture());
+        IncidentSignal signal = captor.getValue();
+        assertEquals(IncidentSeverity.HIGH, signal.severity());
+        assertEquals(IncidentCategory.DATABASE, signal.category());
+        assertTrue(signal.analysisOpt().isPresent());
+        assertSame(analysis, signal.analysisOpt().get());
+        assertTrue(signal.throwableOpt().isEmpty());
+    }
+
+    @Test
+    void capture_throwable_fansOutToSinkWithClassifiedSignal() {
+        IncidentSink sink = mock(IncidentSink.class);
+        IncidentSignalRecorder r = new IncidentSignalRecorder(
+                metrics, new IncidentClassifier(), List.of(sink));
+        SQLException ex = new SQLException("duplicate key");
+
+        r.capture(ex);
+
+        ArgumentCaptor<IncidentSignal> captor = ArgumentCaptor.forClass(IncidentSignal.class);
+        verify(sink).accept(captor.capture());
+        IncidentSignal signal = captor.getValue();
+        assertEquals(IncidentSeverity.HIGH, signal.severity());
+        assertEquals(IncidentCategory.DATABASE, signal.category());
+        assertTrue(signal.throwableOpt().isPresent());
+        assertSame(ex, signal.throwableOpt().get());
+        assertTrue(signal.analysisOpt().isEmpty());
+    }
+
+    @Test
+    void capture_fansOutToMultipleSinksInOrder() {
+        IncidentSink first = mock(IncidentSink.class);
+        IncidentSink second = mock(IncidentSink.class);
+        IncidentSignalRecorder r = new IncidentSignalRecorder(
+                metrics, new IncidentClassifier(), List.of(first, second));
+
+        r.capture(analysisWith(IncidentSeverity.LOW, IncidentCategory.IO));
+
+        verify(first).accept(any(IncidentSignal.class));
+        verify(second).accept(any(IncidentSignal.class));
+    }
+
+    @Test
+    void capture_failingSinkDoesNotBreakOtherSinks() {
+        IncidentSink exploding = mock(IncidentSink.class);
+        IncidentSink healthy = mock(IncidentSink.class);
+        doThrow(new RuntimeException("jira down"))
+                .when(exploding).accept(any(IncidentSignal.class));
+
+        IncidentSignalRecorder r = new IncidentSignalRecorder(
+                metrics, new IncidentClassifier(), List.of(exploding, healthy));
+
+        // Must not propagate — capture is observation, it cannot break callers.
+        r.capture(analysisWith(IncidentSeverity.HIGH, IncidentCategory.DATABASE));
+
+        verify(exploding).accept(any(IncidentSignal.class));
+        verify(healthy).accept(any(IncidentSignal.class));
+        verify(metrics).recordCaptured(eq(IncidentSeverity.HIGH), eq(IncidentCategory.DATABASE));
+    }
+
+    @Test
+    void capture_withNoSinks_doesNothingBeyondMetrics() {
+        IncidentSignalRecorder r = new IncidentSignalRecorder(
+                metrics, new IncidentClassifier(), List.of());
+
+        r.capture(analysisWith(IncidentSeverity.HIGH, IncidentCategory.DATABASE));
+
+        verify(metrics).recordCaptured(eq(IncidentSeverity.HIGH), eq(IncidentCategory.DATABASE));
     }
 
     private static IncidentAnalysis analysisWith(IncidentSeverity severity, IncidentCategory category) {
