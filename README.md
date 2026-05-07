@@ -141,7 +141,7 @@ Once the starter is on the classpath and a `LlmClient` is available, the followi
 | Bean | Condition | Can the app override? |
 |------|-----------|-----------------------|
 | `IncidentAnalysisService` | `LlmClient` bean present | Yes (`@ConditionalOnMissingBean`) |
-| `IncidentSignalRecorder` | always | Yes |
+| `IncidentSignalRecorder` | always (collects all `IncidentSink` beans for fan-out) | Yes |
 | `IncidentMetrics` → `MicrometerIncidentMetrics` | `MeterRegistry` bean on classpath + `publish-metrics=true` | Yes |
 | `IncidentMetrics` → `NoOpIncidentMetrics` | no `MeterRegistry` or `publish-metrics=false` | Yes |
 | `IncidentExceptionCaptureResolver` | servlet web app + `capture-exceptions=true` | Yes |
@@ -338,6 +338,38 @@ IncidentClassifier myIncidentClassifier() {
 ```
 
 This is intentionally minimal; it is not a replacement for proper alerting logic, and `UNKNOWN` remains a valid outcome by design when no rule matches.
+
+### Action layer: `IncidentSink`
+
+Every captured incident is forwarded to zero or more `IncidentSink` beans after metrics are recorded. A sink is the single extension point for acting on a signal — this is the foundation future Jira, Slack, webhook, or audit integrations will plug into. **No such integration is shipped today**, only the contract.
+
+```java
+package com.incident.copilot.core.sink;
+
+@FunctionalInterface
+public interface IncidentSink {
+    void accept(IncidentSignal signal);
+}
+```
+
+`IncidentSignal` carries the classified `severity` and `category`, the timestamp, and whichever originating input was available — a finished `IncidentAnalysis` (analysis path) or a raw `Throwable` (exception-capture path). Exactly one of those two is present, accessible via `analysisOpt()` / `throwableOpt()`.
+
+A consuming app contributes a sink by declaring a bean:
+
+```java
+@Bean
+IncidentSink auditSink() {
+    return signal -> log.info("incident captured: {}/{}", signal.severity(), signal.category());
+}
+```
+
+Safety guarantees:
+
+- **Zero sinks is the default.** If no `IncidentSink` bean is registered, fan-out is a no-op — capture and metrics behave exactly as before.
+- **Sink failures never break the caller.** Each sink is invoked inside a try/catch that logs and continues; a throwing sink does not prevent other sinks from running, does not suppress the metric, and does not propagate to the MVC handler or the calling application code.
+- **Fan-out is synchronous.** Sinks run on the calling thread; a slow sink slows capture. Sinks that do I/O should handle their own concurrency.
+
+No factories, no registry, no routing DSL, no external queue, no persistent buffer — this is deliberately the smallest useful action layer.
 
 The capture code path does not require Actuator — any Micrometer `MeterRegistry` bean is enough to emit. Actuator is pulled in by the application so the metric can be *inspected* over HTTP (see below). The starter itself does not force Actuator on its consumers.
 

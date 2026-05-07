@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.incident.copilot.core.analysis.IncidentAnalysisService;
 import com.incident.copilot.core.analysis.IncidentClassifier;
 import com.incident.copilot.core.analysis.LlmClient;
+import com.incident.copilot.core.sink.IncidentSink;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -123,6 +124,31 @@ class IncidentCopilotAutoConfigurationTest {
     }
 
     @Test
+    void defaults_withNoSinks_recorderStillWires() {
+        runner.run(ctx -> {
+            assertThat(ctx).hasSingleBean(IncidentSignalRecorder.class);
+            assertThat(ctx.getBeansOfType(IncidentSink.class)).isEmpty();
+        });
+    }
+
+    @Test
+    void registeredSinks_areInjectedIntoRecorder() {
+        runner.withUserConfiguration(TwoSinksConfig.class)
+                .run(ctx -> {
+                    assertThat(ctx).hasSingleBean(IncidentSignalRecorder.class);
+                    assertThat(ctx.getBeansOfType(IncidentSink.class)).hasSize(2);
+
+                    IncidentSignalRecorder recorder = ctx.getBean(IncidentSignalRecorder.class);
+                    recorder.capture(new RuntimeException("x"));
+
+                    RecordingSink a = ctx.getBean("sinkA", RecordingSink.class);
+                    RecordingSink b = ctx.getBean("sinkB", RecordingSink.class);
+                    assertThat(a.count).isEqualTo(1);
+                    assertThat(b.count).isEqualTo(1);
+                });
+    }
+
+    @Test
     void consumerProvidedClassifier_winsOverStarter() {
         IncidentClassifier custom = new IncidentClassifier();
         runner.withBean(IncidentClassifier.class, () -> custom)
@@ -154,6 +180,28 @@ class IncidentCopilotAutoConfigurationTest {
         @Bean
         LlmClient llmClient() {
             return (system, user) -> "{}";
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TwoSinksConfig {
+        @Bean
+        RecordingSink sinkA() {
+            return new RecordingSink();
+        }
+
+        @Bean
+        RecordingSink sinkB() {
+            return new RecordingSink();
+        }
+    }
+
+    static class RecordingSink implements IncidentSink {
+        int count;
+
+        @Override
+        public void accept(com.incident.copilot.core.sink.IncidentSignal signal) {
+            count++;
         }
     }
 }

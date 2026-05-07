@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.incident.copilot.core.analysis.IncidentAnalysisService;
 import com.incident.copilot.core.analysis.IncidentClassifier;
 import com.incident.copilot.core.analysis.LlmClient;
+import com.incident.copilot.core.sink.IncidentSink;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -14,6 +16,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.servlet.HandlerExceptionResolver;
+
+import java.util.List;
 
 @AutoConfiguration(afterName = {
         "org.springframework.boot.actuate.autoconfigure.metrics.CompositeMeterRegistryAutoConfiguration",
@@ -57,8 +61,10 @@ public class IncidentCopilotAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public IncidentSignalRecorder incidentSignalRecorder(IncidentMetrics metrics,
-                                                         IncidentClassifier classifier) {
-        return new IncidentSignalRecorder(metrics, classifier);
+                                                         IncidentClassifier classifier,
+                                                         ObjectProvider<IncidentSink> sinks) {
+        List<IncidentSink> orderedSinks = sinks.orderedStream().toList();
+        return new IncidentSignalRecorder(metrics, classifier, orderedSinks);
     }
 
     @Bean
