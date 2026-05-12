@@ -11,12 +11,63 @@
         <relativePath/>
     </parent>
 
+    <!--
+        NOTE: groupId is intentionally a development placeholder.
+        Before publishing to Maven Central, change it to a reverse-DNS
+        coordinate whose namespace you have verified on the Central Portal
+        (typically io.github.<your-handle>). See docs/PUBLISHING.md §3.1.
+    -->
     <groupId>com.incident</groupId>
     <artifactId>incident-copilot-parent</artifactId>
     <version>0.1.0</version>
     <packaging>pom</packaging>
+
     <name>Incident Copilot (parent)</name>
-    <description>Aggregator POM for the Incident Copilot multi-module build</description>
+    <description>
+        Incident Copilot — Spring Boot starter and supporting libraries that turn raw logs and
+        stack traces into structured incident analysis, capture incident signals from within
+        Spring Boot apps, and publish them as Micrometer metrics.
+    </description>
+    <url>https://github.com/AliRahbari/Incident-copilot</url>
+    <inceptionYear>2024</inceptionYear>
+
+    <!--
+        TODO(publish): pick a real license, add a LICENSE file at the repo root, and
+        update this block before any Maven Central deployment. Central rejects POMs
+        without a <licenses> entry.
+    -->
+    <licenses>
+        <license>
+            <name>TODO - Replace before publishing (e.g. Apache License, Version 2.0)</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+            <comments>Placeholder. No license has been chosen yet for Incident Copilot.</comments>
+        </license>
+    </licenses>
+
+    <!--
+        TODO(publish): fill in real developer details before any Maven Central deployment.
+    -->
+    <developers>
+        <developer>
+            <id>TODO</id>
+            <name>TODO - Replace before publishing</name>
+            <email>TODO@example.com</email>
+            <url>https://github.com/AliRahbari</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/AliRahbari/Incident-copilot.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/AliRahbari/Incident-copilot.git</developerConnection>
+        <url>https://github.com/AliRahbari/Incident-copilot</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/AliRahbari/Incident-copilot/issues</url>
+    </issueManagement>
 
     <modules>
         <module>incident-copilot-core</module>
@@ -27,6 +78,12 @@
     <properties>
         <java.version>21</java.version>
         <springdoc.version>2.8.6</springdoc.version>
+
+        <!-- Publishing plugin versions are pinned here so the release profile is reproducible. -->
+        <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
+        <maven-javadoc-plugin.version>3.10.0</maven-javadoc-plugin.version>
+        <maven-gpg-plugin.version>3.2.4</maven-gpg-plugin.version>
+        <central-publishing-maven-plugin.version>0.5.0</central-publishing-maven-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -48,4 +105,141 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>${maven-source-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>${maven-javadoc-plugin.version}</version>
+                    <configuration>
+                        <!-- Pre-1.0: keep javadoc generation lenient so missing tags don't fail releases. -->
+                        <doclint>none</doclint>
+                        <failOnError>false</failOnError>
+                        <quiet>true</quiet>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-gpg-plugin</artifactId>
+                    <version>${maven-gpg-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.sonatype.central</groupId>
+                    <artifactId>central-publishing-maven-plugin</artifactId>
+                    <version>${central-publishing-maven-plugin.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <profiles>
+        <!--
+            Release-time profile: attaches -sources.jar and -javadoc.jar to all modules.
+            This is required by Maven Central and is nice-to-have everywhere else.
+            Kept out of the default build so day-to-day `mvn install` stays fast.
+        -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
+            GitHub Packages target. Activated explicitly: `mvn -Prelease,github deploy`.
+            See docs/PUBLISHING.md §2.
+        -->
+        <profile>
+            <id>github</id>
+            <distributionManagement>
+                <repository>
+                    <id>github</id>
+                    <name>GitHub Packages - Incident Copilot</name>
+                    <url>https://maven.pkg.github.com/AliRahbari/Incident-copilot</url>
+                </repository>
+                <snapshotRepository>
+                    <id>github</id>
+                    <name>GitHub Packages - Incident Copilot (snapshots)</name>
+                    <url>https://maven.pkg.github.com/AliRahbari/Incident-copilot</url>
+                </snapshotRepository>
+            </distributionManagement>
+        </profile>
+
+        <!--
+            Maven Central (Central Portal) target. Activated explicitly:
+            `mvn -Prelease,central deploy`. Adds GPG signing for every artifact and
+            routes the deploy through central-publishing-maven-plugin. Requires the
+            metadata TODOs in this POM to be replaced first. See docs/PUBLISHING.md §3.
+        -->
+        <profile>
+            <id>central</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                                <configuration>
+                                    <!-- Disable interactive prompt in CI; provide via gpg.passphrase property or agent. -->
+                                    <gpgArguments>
+                                        <arg>--pinentry-mode</arg>
+                                        <arg>loopback</arg>
+                                    </gpgArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <!-- Flip to false to inspect the staged deployment in the Central Portal UI first. -->
+                            <autoPublish>true</autoPublish>
+                            <waitUntil>published</waitUntil>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

@@ -1,107 +1,48 @@
 # Incident Copilot
 
-Turn raw logs into actionable incident insights in seconds.
+Turn raw logs and stack traces into actionable incident insights in seconds — and capture incident signals from inside your Spring Boot app.
 
-Incident Copilot is a lightweight backend service that analyzes application logs and stack traces using an LLM and returns structured, evidence-based incident analysis — including observations, ranked causes, confidence levels, and concrete next steps.
-## Why
+Incident Copilot ships as:
 
-When an incident hits, engineers spend time scanning logs, forming hypotheses, and figuring out where to start.
+- a small framework-agnostic **core library** (domain model + analysis logic),
+- a **Spring Boot starter** that auto-configures incident capture and metrics, and
+- a runnable **demo app** that exposes a REST API and wires an OpenAI-backed `LlmClient`.
 
-Incident Copilot automates that first step:
-- highlights what matters
-- suggests likely causes
-- and points you to the next action
+---
 
-It is not a replacement for human judgment — it is a fast first responder that reduces time-to-understanding.
+## 1. Project overview
 
-## Features
+When an incident hits, engineers spend their first minutes scanning logs, forming hypotheses, and figuring out where to start. Incident Copilot automates that first pass:
 
-- Analyze raw logs and stack traces in seconds
-- Extract key observations directly from the input
-- Suggest likely causes with confidence levels
-- Provide evidence-backed reasoning
-- Recommend actionable next debugging steps
+- highlights what matters in a log / stack trace,
+- suggests likely causes with confidence and evidence,
+- and recommends concrete next debugging steps.
 
-### Technical highlights
+It is a fast first responder, not a replacement for human judgment, and not a full observability platform.
 
-- REST API (POST /analyze)
-- OpenAI JSON mode for structured output
-- Input validation and consistent error handling
-- Configurable timeouts for LLM calls
+**Status: MVP / pre-1.0.** The artifacts are **not yet published to Maven Central**. Consumers either build & install locally (see §4) or wait for a published release. See §9 for current limitations and §10 for the roadmap.
 
-## Tech Stack
+---
 
-| Component       | Technology           |
-|-----------------|----------------------|
-| Language        | Java 21              |
-| Framework       | Spring Boot 3.4      |
-| Build tool      | Maven                |
-| LLM provider    | OpenAI API (gpt-4o)  |
-| HTTP client     | Spring RestClient    |
-| Validation      | Jakarta Bean Validation |
-| Testing         | JUnit 5 + Mockito    |
+## 2. Module overview
 
-## Project Structure
+The build is a Maven multi-module project (`packaging=pom` at the root):
 
-The build is a Maven multi-module project with an aggregator POM at the root:
+| Module | Type | Purpose |
+|---|---|---|
+| `incident-copilot-core` | Library | Framework-agnostic domain model (`IncidentInput`, `IncidentAnalysis`, `IncidentSeverity`, `IncidentCategory`, …), the `IncidentAnalysisService` analyzer, the `LlmClient` abstraction, the `IncidentClassifier` rule-based tagger, and the `IncidentSink` extension point. No Spring dependency. |
+| `incident-copilot-spring-boot-starter` | Library | Spring Boot 3 auto-configuration. Given a `LlmClient` bean, wires `IncidentAnalysisService`, `IncidentSignalRecorder`, an `IncidentMetrics` (Micrometer or no-op), and an MVC `HandlerExceptionResolver` for non-invasive exception capture. Micrometer / Spring Web / Servlet API deps are `<optional>true</optional>` — only active when the consumer already pulls them in. |
+| `incident-copilot-app` | Application | Runnable Spring Boot reference app: REST API (`POST /analyze`), DTOs and mapping, an `OpenAiClient` implementation of `LlmClient`, global error handling, springdoc, and an Actuator surface for inspecting metrics. **This is the demo, not part of the library surface.** Consumers do not depend on it. |
 
-```
-.
-├── pom.xml                                  # Aggregator / parent POM (packaging=pom)
-├── incident-copilot-core/                   # Framework-agnostic domain + analysis logic
-│   └── src/main/java/com/incident/copilot/core/
-│       ├── domain/                          # Records + enums (IncidentInput, IncidentAnalysis, ...)
-│       ├── analysis/
-│       │   ├── IncidentAnalysisService.java # Plain Java analyzer (no Spring annotations)
-│       │   └── LlmClient.java               # LLM client abstraction
-│       └── exception/                       # Domain-level exceptions (LlmClientException, ...)
-├── incident-copilot-spring-boot-starter/    # Reusable Spring Boot auto-configuration
-│   └── src/main/java/com/incident/copilot/spring/
-│       ├── IncidentCopilotAutoConfiguration.java
-│       ├── IncidentCopilotProperties.java
-│       ├── IncidentSignalRecorder.java
-│       ├── IncidentMetrics.java / MicrometerIncidentMetrics.java
-│       └── IncidentExceptionCaptureResolver.java
-└── incident-copilot-app/                    # Spring Boot application — REST API + wiring
-    └── src/main/java/com/incident/copilot/
-        ├── IncidentCopilotApplication.java  # Entry point
-        ├── client/
-        │   └── OpenAiClient.java            # OpenAI API client with timeouts (implements LlmClient)
-        ├── controller/
-        │   ├── IncidentController.java      # POST /analyze endpoint
-        │   └── GlobalExceptionHandler.java  # Centralized error handling
-        ├── dto/
-        │   ├── AnalyzeRequest.java          # Request validation
-        │   ├── AnalyzeResponse.java         # Response structure
-        │   ├── PossibleCause.java           # Cause with confidence + evidence
-        │   ├── ErrorResponse.java           # Error response structure
-        │   └── IncidentAnalysisMapper.java  # Domain → wire mapping
-        └── config/
-            └── OpenApiConfig.java           # springdoc
-```
+---
 
-### What belongs where
+## 3. For library users: using the starter
 
-- **`incident-copilot-core`** — pure Java, no Spring dependency. Holds the domain model (records, enums), the `IncidentAnalysisService` analyzer, the `LlmClient` abstraction, and domain-level exceptions. Publishable as a plain library.
-- **`incident-copilot-spring-boot-starter`** — reusable auto-configuration. Given a `LlmClient` bean, it wires an `IncidentAnalysisService` plus the signal-capture surface (`IncidentSignalRecorder`, `IncidentMetrics`, MVC `IncidentExceptionCaptureResolver`). All dependencies on Micrometer, Spring Web, and the Servlet API are `<optional>true</optional>` — they only activate when the consuming app already has them. Exposes a single `incident-copilot.*` properties namespace.
-- **`incident-copilot-app`** — the runnable Spring Boot application. Provides product-specific pieces only: the entry point, the REST controller and DTOs, the `OpenAiClient` implementation of `LlmClient`, global error handling, and the springdoc config. It owns no Spring integration plumbing — everything else is delivered by the starter.
+> This section assumes the artifacts are resolvable from your Maven repository. Until Maven Central publication, see §4 first to install them locally.
 
-### What a consuming app gets for free
+The starter is a standard Spring Boot 3 auto-configuration registered via `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`. There is no `@EnableIncidentCopilot` annotation or `@Import` to add.
 
-Adding the starter as a dependency and providing a `LlmClient` bean is enough to get:
-
-- a ready `IncidentAnalysisService` bean (wired against your `LlmClient` and the app's `ObjectMapper`)
-- an `IncidentSignalRecorder` for explicit captures from application code
-- Micrometer counter publication when a `MeterRegistry` is on the classpath
-- a non-invasive `HandlerExceptionResolver` for MVC apps that records a signal per thrown exception without altering the response
-
-Every bean uses `@ConditionalOnMissingBean`, so any of these can be replaced by the consuming app.
-
-### Using the starter in another Spring Boot application
-
-The starter is a standard Spring Boot 3 auto-configuration — it is picked up from `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`. There is no `@EnableIncidentCopilot` or manual `@Import` to add. A minimal consumer only has to do three things:
-
-**1. Add the dependency**
+### 3.1 Add the dependency
 
 ```xml
 <dependency>
@@ -111,7 +52,11 @@ The starter is a standard Spring Boot 3 auto-configuration — it is picked up f
 </dependency>
 ```
 
-**2. Provide a `LlmClient` bean** — this is the only bean the starter expects the consuming app to contribute, because the choice of LLM provider belongs to the application, not the library:
+The starter transitively brings `incident-copilot-core`. It does **not** pull in Micrometer, Spring Web, or the Servlet API — those are `<optional>true</optional>` and activate only when your application already depends on them (which a typical `spring-boot-starter-web` + `spring-boot-starter-actuator` app does).
+
+### 3.2 Provide an `LlmClient` bean (required for analysis)
+
+The choice of LLM provider belongs to the application, not the library. The starter does **not** ship an `LlmClient`:
 
 ```java
 @Configuration
@@ -120,14 +65,17 @@ class LlmConfig {
     @Bean
     LlmClient llmClient() {
         return (systemPrompt, userMessage) -> {
-            // call your LLM provider here and return the raw assistant response
+            // Call your LLM provider (OpenAI, Anthropic, Bedrock, a local model, …)
+            // and return the raw assistant response as a JSON string.
             return "...";
         };
     }
 }
 ```
 
-**3. (Optional) Override defaults via `application.yml`:**
+Without an `LlmClient` bean, the `IncidentAnalysisService` is simply not created — capture and metrics still work, analysis does not.
+
+### 3.3 Optional `application.yml` configuration
 
 ```yaml
 incident-copilot:
@@ -136,311 +84,306 @@ incident-copilot:
   capture-exceptions: true    # install MVC exception resolver (default: true)
 ```
 
-Once the starter is on the classpath and a `LlmClient` is available, the following beans are auto-wired:
+### 3.4 What the starter auto-configures
 
-| Bean | Condition | Can the app override? |
-|------|-----------|-----------------------|
-| `IncidentAnalysisService` | `LlmClient` bean present | Yes (`@ConditionalOnMissingBean`) |
-| `IncidentSignalRecorder` | always (collects all `IncidentSink` beans for fan-out) | Yes |
-| `IncidentMetrics` → `MicrometerIncidentMetrics` | `MeterRegistry` bean on classpath + `publish-metrics=true` | Yes |
-| `IncidentMetrics` → `NoOpIncidentMetrics` | no `MeterRegistry` or `publish-metrics=false` | Yes |
+| Bean | Condition | Replaceable? |
+|---|---|---|
+| `IncidentClassifier` | always | Yes (`@ConditionalOnMissingBean`) |
+| `IncidentAnalysisService` | an `LlmClient` bean is present | Yes |
+| `IncidentSignalRecorder` | always; collects all `IncidentSink` beans for fan-out | Yes |
+| `IncidentMetrics` → `MicrometerIncidentMetrics` | `MeterRegistry` on classpath + `publish-metrics=true` | Yes |
+| `IncidentMetrics` → `NoOpIncidentMetrics` | no `MeterRegistry`, or `publish-metrics=false` | Yes |
 | `IncidentExceptionCaptureResolver` | servlet web app + `capture-exceptions=true` | Yes |
 
-**What remains app-specific** (the starter deliberately does not ship these):
+### 3.5 What the consuming app must still provide
 
-- the `LlmClient` implementation (OpenAI, Anthropic, Bedrock, a local model, a mock for tests, …)
-- any REST controllers or HTTP surface that calls `IncidentAnalysisService`
-- request/response DTOs and domain → wire mapping
-- global exception handling / `@ControllerAdvice`
-- `MeterRegistry` wiring (typically via `spring-boot-starter-actuator`), if you want the Micrometer path rather than the no-op
-- the OpenAPI / springdoc configuration, if any
+- An `LlmClient` implementation (required for LLM analysis only — capture/metrics work without it).
+- Any REST controllers or HTTP surface that calls `IncidentAnalysisService`.
+- Request/response DTOs and domain→wire mapping.
+- Global exception handling / `@ControllerAdvice`, if you want custom error bodies.
+- A `MeterRegistry` (typically via `spring-boot-starter-actuator`) if you want metrics published to a real backend rather than the no-op.
 
-Micrometer, Spring Web, and the Servlet API are declared as `<optional>true</optional>` on the starter, so a non-web or non-metrics application pulls in no extra transitive classes and simply gets the no-op / servlet-skipped paths.
+### 3.6 What the starter does **not** do — important
 
-## Getting Started
+- It does **not** read or tail your application log files.
+- It does **not** intercept arbitrary `Logger.error(...)` calls or every uncaught throwable in the JVM.
+- It does **not** ship sinks for Slack, Jira, PagerDuty, webhooks, or any other destination.
 
-### Prerequisites
+The starter captures incident signals only via the channels listed in 3.7 and 3.8 below.
 
-- Java 21+
-- Maven 3.9+
-- An OpenAI API key
+### 3.7 MVC exception capture
 
-### Environment Variables
+When the app is a **servlet** Spring Boot app and `incident-copilot.capture-exceptions=true` (default), the starter registers a non-invasive `HandlerExceptionResolver`. For every exception that bubbles out of an `@Controller`/`@RestController` handler, the resolver:
 
-| Variable        | Required | Description              |
-|-----------------|----------|--------------------------|
-| `OPENAI_API_KEY` | Yes      | Your OpenAI API key      |
+1. classifies the throwable into `(severity, category)`,
+2. records the `incident.copilot.captures` counter, and
+3. fans out an `IncidentSignal` to any registered `IncidentSink` beans.
 
-### Run Locally
+The resolver returns `null` — it never produces a response and never alters the response your existing `@ControllerAdvice` would have produced.
+
+This is the **only** automatic capture path. Reactive (WebFlux) apps are not auto-captured. Background-thread exceptions are not auto-captured. For anything else, see 3.8.
+
+### 3.8 Explicit captures from application code
+
+For any code path that is not an MVC handler — scheduled jobs, message listeners, completed analyses, business validation failures, etc. — inject `IncidentSignalRecorder` and capture explicitly:
+
+```java
+@Component
+class OrderJob {
+
+    private final IncidentSignalRecorder recorder;
+
+    OrderJob(IncidentSignalRecorder recorder) {
+        this.recorder = recorder;
+    }
+
+    @Scheduled(fixedDelay = 60_000)
+    void run() {
+        try {
+            // ... business logic ...
+        } catch (RuntimeException ex) {
+            recorder.capture(ex);     // classify + meter + fan out to sinks
+            throw ex;
+        }
+    }
+}
+```
+
+`recorder.capture(IncidentAnalysis)` is the matching overload for the analysis path — call it after `IncidentAnalysisService` returns so you get a metric and a sink fan-out tagged with the analysis's own severity/category.
+
+### 3.9 Metrics
+
+When a `MeterRegistry` bean is available and `publish-metrics=true`, the starter publishes one Micrometer counter:
+
+| Metric | Tags | Description |
+|---|---|---|
+| `incident.copilot.captures` | `severity`, `category` | Incremented once per captured incident signal. |
+
+Tag values are uppercase enum names of `IncidentSeverity` (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`, `UNKNOWN`) and `IncidentCategory` (`MEMORY`, `CONCURRENCY`, `IO`, `NETWORK`, `DATABASE`, `CONFIGURATION`, `STARTUP`, `UNKNOWN`). Both tags are always present. `UNKNOWN` is a valid outcome when no classifier rule matches.
+
+To replace the classifier, contribute your own `IncidentClassifier` bean — `@ConditionalOnMissingBean` means your implementation wins. See §8 for how to inspect metrics via Actuator in the demo app.
+
+### 3.10 The `IncidentSink` extension point
+
+Every captured signal is fanned out to zero or more `IncidentSink` beans **after** metrics are recorded. This is the single extension point for acting on a signal — future Jira/Slack/webhook integrations will plug in here. **No such integration is shipped today, only the contract.**
+
+```java
+@Bean
+IncidentSink auditSink() {
+    return signal -> log.info("incident captured: {}/{}",
+            signal.severity(), signal.category());
+}
+```
+
+`IncidentSignal` carries the classified severity/category, a timestamp, and exactly one of:
+
+- a finished `IncidentAnalysis` (analysis path) — via `signal.analysisOpt()`
+- a raw `Throwable` (exception-capture path) — via `signal.throwableOpt()`
+
+Safety guarantees:
+
+- **Zero sinks is the default.** No bean ⇒ fan-out is a no-op.
+- **Sink failures never break the caller.** Each sink runs inside a try/catch that logs and continues; a throwing sink does not suppress the metric and does not propagate.
+- **Fan-out is synchronous on the calling thread.** Slow sinks slow capture — sinks that do I/O should manage their own concurrency.
+
+---
+
+## 4. Using the project locally (before Maven Central publication)
+
+Until the libraries are published, third parties consume them by installing the artifacts into a local Maven repository.
+
+### Option 1 — clone & `mvn install` (recommended)
 
 ```bash
-# Clone the repository
 git clone https://github.com/AliRahbari/Incident-copilot.git
 cd Incident-copilot
 
-# Set your API key
+# Installs incident-copilot-core and -spring-boot-starter into ~/.m2/repository.
+# The app module is built but its deploy is skipped (it's the demo).
+mvn clean install -DskipTests
+```
+
+Then, in your own Spring Boot project's `pom.xml`:
+
+```xml
+<dependency>
+    <groupId>com.incident</groupId>
+    <artifactId>incident-copilot-spring-boot-starter</artifactId>
+    <version>0.1.0</version>
+</dependency>
+```
+
+Maven resolves it from your local `~/.m2/repository` without any other configuration.
+
+### Option 2 — build JARs and install them manually
+
+If you only have the JARs (e.g. a CI artifact handoff) and not the source tree:
+
+```bash
+mvn install:install-file \
+  -Dfile=incident-copilot-core-0.1.0.jar \
+  -DgroupId=com.incident \
+  -DartifactId=incident-copilot-core \
+  -Dversion=0.1.0 \
+  -Dpackaging=jar
+
+mvn install:install-file \
+  -Dfile=incident-copilot-spring-boot-starter-0.1.0.jar \
+  -DgroupId=com.incident \
+  -DartifactId=incident-copilot-spring-boot-starter \
+  -Dversion=0.1.0 \
+  -Dpackaging=jar
+```
+
+Pair each JAR with its `-sources.jar` and `-javadoc.jar` if your IDE / consumers want them.
+
+---
+
+## 5. For maintainers: build & test
+
+Requirements: **JDK 21+**, **Maven 3.9+**, and (for the demo app at runtime) an OpenAI API key.
+
+```bash
+# Build everything (parent + 3 modules), run all tests
+mvn clean verify
+
+# Build without tests
+mvn clean install -DskipTests
+
+# Run only the unit/integration tests
+mvn test
+
+# Run only the demo app (mounts core + starter from the reactor)
+mvn -pl incident-copilot-app -am spring-boot:run
+
+# Run the demo app with a real OpenAI key
 export OPENAI_API_KEY=sk-...
-
-# Build the whole project (parent + both modules)
-mvn clean package
-
-# Run the Spring Boot app module
 mvn -pl incident-copilot-app -am spring-boot:run
 ```
 
-The server starts on `http://localhost:8585`.
-
-Alternatively, after `mvn clean package` you can run the produced fat jar directly:
+The server starts on `http://localhost:8585`. A fat-jar is also produced under `incident-copilot-app/target/`:
 
 ```bash
 java -jar incident-copilot-app/target/incident-copilot-app-*.jar
 ```
 
-### Run with Docker
+### Docker / Docker Compose (demo app only)
 
 ```bash
-# Build the image
+# Build and run via Docker
 docker build -t incident-copilot .
-
-# Run the container
 docker run -p 8585:8585 -e OPENAI_API_KEY=sk-... incident-copilot
-```
 
-The server starts on `http://localhost:8585`.
-
-### Run with Docker Compose
-
-```bash
-# Set your API key (or add it to a .env file in the project root)
+# Or via Docker Compose
 export OPENAI_API_KEY=sk-...
-
-# Build and run
 docker compose up --build
 ```
 
-The server starts on `http://localhost:8585`.
+The Docker image bundles the runnable demo app, not the library — consumers of the starter do not need it.
 
-### Run Tests
+---
 
-Run the full test suite across both modules from the repository root:
+## 6. For maintainers: publishing
 
-```bash
-mvn test
-```
+Three publication paths are supported. Detailed step-by-step instructions live in [`docs/PUBLISHING.md`](docs/PUBLISHING.md); the summary below should be enough to pick the right one.
 
-## API Usage
+| Path | Audience | Effort | Notes |
+|---|---|---|---|
+| **Local install** (`mvn clean install`) | Yourself + anyone with the source tree | None | The default during development. See §4. |
+| **GitHub Packages** | Anyone who can configure a GitHub Maven repo + auth token | Low | Activated with `-Prelease,github` (see PUBLISHING.md). Consumers must add a `<repository>` block and authenticate to GHCR Maven. |
+| **Maven Central** | Anyone, no extra config | High | Requires verified namespace ownership on the Central Portal, GPG-signed artifacts, source + javadoc jars, and a published license. Activated with `-Prelease,central`. |
 
-### Request
+The build is already wired for source jars, javadoc jars, GPG signing, and the modern Central Portal flow via `central-publishing-maven-plugin` — all gated behind a `release` profile so day-to-day builds stay fast.
+
+Before Maven Central can be used, the following must be settled (intentionally not invented in the POM — they appear as `TODO` placeholders):
+
+- A real reverse-DNS `groupId` whose namespace you have verified on the Central Portal (e.g. `io.github.<your-handle>`). The current `com.incident` will be rejected.
+- A published license (LICENSE file + `<licenses>` entry).
+- Developer metadata (`<developers>` entry).
+- A GPG key uploaded to a public keyserver, with secret-key material available to the release machine.
+- Central Portal credentials in `~/.m2/settings.xml` under `<server><id>central</id></server>`.
+
+The demo app (`incident-copilot-app`) is configured with `maven-deploy-plugin.skip=true`. It is built and tested by every release but **never deployed** — it's not a library.
+
+---
+
+## 7. The demo app (`incident-copilot-app`)
+
+`incident-copilot-app` is a thin, runnable reference application that:
+
+- exposes the historical `POST /analyze` REST endpoint,
+- ships an `OpenAiClient` implementation of `LlmClient`,
+- provides a `@ControllerAdvice` for consistent error bodies,
+- exposes springdoc / Swagger UI, and
+- enables only the Actuator `metrics` endpoint, for inspecting `incident.copilot.captures` over HTTP.
+
+It exists to show how the starter is wired in practice and to give the project an end-to-end demo. **Library consumers do not depend on it** and should not pull it in transitively.
+
+### REST API at a glance
 
 ```
 POST /analyze
 Content-Type: application/json
+
+{ "input": "...raw log or stack trace..." }
 ```
 
-```json
-{
-  "input": "2024-03-15 14:23:01 ERROR [http-nio-8080-exec-3] com.example.UserService - Failed to fetch user profile\njava.net.SocketTimeoutException: Connect timed out\n\tat java.net.Socket.connect(Socket.java:633)\n\tat com.example.UserService.getProfile(UserService.java:47)\n\tat com.example.UserController.show(UserController.java:28)"
-}
-```
+Returns a structured `summary` + `observations` + `possibleCauses` (with `confidence` and `evidence`) + `nextSteps`. Error responses:
 
-### Response
+| Status | Condition |
+|---|---|
+| 400 | Blank, missing, or > 50,000-character input |
+| 502 | LLM API call failed, or LLM returned an unparseable response |
+| 500 | Unexpected server error |
 
-```json
-{
-  "summary": "UserService is failing to fetch user profiles due to a socket connection timeout, likely indicating the downstream dependency is unreachable or slow.",
-  "observations": [
-    "java.net.SocketTimeoutException: Connect timed out",
-    "Error originates in com.example.UserService.getProfile(UserService.java:47)",
-    "Called from com.example.UserController.show(UserController.java:28)",
-    "Single occurrence logged at 2024-03-15 14:23:01 on thread http-nio-8080-exec-3"
-  ],
-  "possibleCauses": [
-    {
-      "cause": "Downstream service that UserService.getProfile connects to is unreachable or not responding within the timeout window",
-      "confidence": "high",
-      "evidence": [
-        "java.net.SocketTimeoutException: Connect timed out",
-        "Stack trace points to Socket.connect as the failure point"
-      ]
-    },
-    {
-      "cause": "Connection timeout threshold is configured too low for the target service's typical response time",
-      "confidence": "low",
-      "evidence": [
-        "SocketTimeoutException on connect phase rather than read phase"
-      ]
-    }
-  ],
-  "nextSteps": [
-    "Check health and reachability of the service that UserService.getProfile(UserService.java:47) connects to",
-    "Review connection timeout configuration for the HTTP client used in UserService",
-    "Check for network-level issues (DNS, firewall, security groups) between this service and its downstream dependency",
-    "Look for additional correlated errors around 2024-03-15 14:23:01 in other services"
-  ]
-}
-```
+---
 
-### Error Responses
+## 8. Metrics & Actuator
 
-| Status | Condition                          | Body                                          |
-|--------|------------------------------------|-----------------------------------------------|
-| 400    | Blank or missing input             | `{"error": "input: Input must not be blank"}` |
-| 400    | Input exceeds 50,000 characters    | `{"error": "input: Input must not exceed 50,000 characters"}` |
-| 502    | LLM API call failed                | `{"error": "LLM service error — please try again later"}` |
-| 502    | LLM returned unparseable response  | `{"error": "LLM returned an invalid response — please try again"}` |
-| 500    | Unexpected server error            | `{"error": "Internal server error"}` |
+When `incident-copilot-spring-boot-starter` runs against a `MeterRegistry`, it publishes:
 
-## Spring integration & metrics
+| Metric | Tags |
+|---|---|
+| `incident.copilot.captures` | `severity`, `category` |
 
-The Spring integration lives in the reusable `incident-copilot-spring-boot-starter` module (package `com.incident.copilot.spring`). The app consumes it as a dependency and adds no integration code of its own.
-
-### Configuration properties
-
-All keys use the `incident-copilot` prefix and default to `true` (i.e. the integration is fully on out of the box):
-
-| Key | Default | Effect |
-|-----|---------|--------|
-| `incident-copilot.enabled` | `true` | Master switch. When `false`, none of the integration beans are registered. |
-| `incident-copilot.publish-metrics` | `true` | Publish Micrometer metrics when a `MeterRegistry` is present. When `false`, a no-op `IncidentMetrics` is used. |
-| `incident-copilot.capture-exceptions` | `true` | Register a `HandlerExceptionResolver` that records a signal for exceptions thrown from MVC handlers. The resolver never produces a response — it only records and delegates back to the existing `@ControllerAdvice`. |
-
-### Metrics
-
-When a `MeterRegistry` is available and metrics are enabled, a single Micrometer counter is published:
-
-| Metric | Tags | Description |
-|--------|------|-------------|
-| `incident.copilot.captures` | `severity`, `category` | Incremented once per captured incident signal. |
-
-Tag values are the uppercase enum names of `IncidentSeverity` and `IncidentCategory`. Both tags are always present; when no rule matches the value is `UNKNOWN`. Sum over tags gives the overall total; filtering by a single tag gives a per-severity or per-category breakdown.
-
-#### Classification
-
-Both capture paths (completed analyses and raw exceptions caught by `IncidentExceptionCaptureResolver`) run through a lightweight rule-based `IncidentClassifier` before hitting metrics, so `severity` and `category` tags are no longer mostly `UNKNOWN` for common scenarios.
-
-The taxonomy is deliberately small:
-
-- **`IncidentCategory`**: `MEMORY`, `CONCURRENCY`, `IO`, `NETWORK`, `DATABASE`, `CONFIGURATION`, `STARTUP`, `UNKNOWN`
-- **`IncidentSeverity`**: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`, `UNKNOWN`
-
-Rules (no DSL, no external config, no ML):
-
-- **Exceptions** — the cause chain is walked and matched against JDK / Spring / JPA types: `OutOfMemoryError` → `MEMORY/CRITICAL`, `SQLException` → `DATABASE/HIGH`, `ConnectException`/`UnknownHostException`/`SocketTimeoutException` → `NETWORK/HIGH`, `TimeoutException`/`InterruptedException` → `CONCURRENCY/MEDIUM`, `IOException` → `IO/MEDIUM`, Spring `BeanCreationException` → `CONFIGURATION/HIGH`, etc. Unmatched throwables fall back to `MEDIUM/UNKNOWN`.
-- **Analysis text** — the LLM summary + observations are scanned for category keywords (`heap`, `deadlock`, `connection refused`, `jdbc`, `bean`, `context refresh`, …) and severity keywords (`critical`/`fatal`/`outage` → `CRITICAL`, `error`/`exception`/`failed` → `HIGH`, `degraded`/`slow`/`latency` → `MEDIUM`).
-
-To extend or replace the logic, contribute your own `IncidentClassifier` bean — the starter registers a default via `@ConditionalOnMissingBean`, so your implementation simply wins:
-
-```java
-@Bean
-IncidentClassifier myIncidentClassifier() {
-    return new MyCustomClassifier();
-}
-```
-
-This is intentionally minimal; it is not a replacement for proper alerting logic, and `UNKNOWN` remains a valid outcome by design when no rule matches.
-
-### Action layer: `IncidentSink`
-
-Every captured incident is forwarded to zero or more `IncidentSink` beans after metrics are recorded. A sink is the single extension point for acting on a signal — this is the foundation future Jira, Slack, webhook, or audit integrations will plug into. **No such integration is shipped today**, only the contract.
-
-```java
-package com.incident.copilot.core.sink;
-
-@FunctionalInterface
-public interface IncidentSink {
-    void accept(IncidentSignal signal);
-}
-```
-
-`IncidentSignal` carries the classified `severity` and `category`, the timestamp, and whichever originating input was available — a finished `IncidentAnalysis` (analysis path) or a raw `Throwable` (exception-capture path). Exactly one of those two is present, accessible via `analysisOpt()` / `throwableOpt()`.
-
-A consuming app contributes a sink by declaring a bean:
-
-```java
-@Bean
-IncidentSink auditSink() {
-    return signal -> log.info("incident captured: {}/{}", signal.severity(), signal.category());
-}
-```
-
-Safety guarantees:
-
-- **Zero sinks is the default.** If no `IncidentSink` bean is registered, fan-out is a no-op — capture and metrics behave exactly as before.
-- **Sink failures never break the caller.** Each sink is invoked inside a try/catch that logs and continues; a throwing sink does not prevent other sinks from running, does not suppress the metric, and does not propagate to the MVC handler or the calling application code.
-- **Fan-out is synchronous.** Sinks run on the calling thread; a slow sink slows capture. Sinks that do I/O should handle their own concurrency.
-
-No factories, no registry, no routing DSL, no external queue, no persistent buffer — this is deliberately the smallest useful action layer.
-
-The capture code path does not require Actuator — any Micrometer `MeterRegistry` bean is enough to emit. Actuator is pulled in by the application so the metric can be *inspected* over HTTP (see below). The starter itself does not force Actuator on its consumers.
-
-#### Inspecting metrics via Actuator
-
-The application exposes a minimal Actuator surface — only the `metrics` endpoint — for local inspection:
+The demo app exposes only the `metrics` Actuator endpoint (`management.endpoints.web.exposure.include: metrics`) — enough to verify the counter locally, not a production observability surface:
 
 ```bash
-# List all registered metric names (includes incident.copilot.captures)
+# List all registered metric names
 curl http://localhost:8585/actuator/metrics
 
-# Show the captures counter with available tags and total value
+# Show the captures counter with tags + value
 curl http://localhost:8585/actuator/metrics/incident.copilot.captures
 
 # Filter to a specific severity/category slice
 curl "http://localhost:8585/actuator/metrics/incident.copilot.captures?tag=severity:UNKNOWN&tag=category:UNKNOWN"
 ```
 
-Only `metrics` is exposed (`management.endpoints.web.exposure.include: metrics`). No `health`, `env`, `beans`, or other endpoints are reachable, and no Actuator security is configured — this is a development and testing aid, not a production-grade observability surface.
+`IncidentCopilotIntegrationTest`, `MicrometerIncidentMetricsTest`, and `ActuatorMetricsEndpointTest` cover the metric contract and its Actuator visibility on every `mvn test`.
 
-The integration tests (`IncidentCopilotIntegrationTest`, `MicrometerIncidentMetricsTest`, `ActuatorMetricsEndpointTest`) cover both the metric contract and its Actuator visibility on every `mvn test`.
+---
 
-## Current Limitations
+## 9. Current limitations
 
-This is an MVP. Key limitations:
+This is an MVP. Honest list:
 
-- **No authentication** — the endpoint is open
-- **No persistence** — analysis results are not stored
-- **No rate limiting** — unprotected against abuse
-- **Single LLM provider** — hardcoded to OpenAI
-- **No streaming** — full response is returned at once
-- **No multi-turn context** — each request is independent
+- **Not on Maven Central yet** — consume via local install (§4) until publication.
+- **No authentication / rate limiting** on the demo app's `/analyze` endpoint.
+- **No persistence** — analyses are not stored.
+- **Single LLM provider in the demo** — `OpenAiClient` (consumers wire their own).
+- **No streaming responses** from the analysis API.
+- **No multi-turn context.**
+- **Capture paths are narrow by design**: servlet MVC handler exceptions + explicit `IncidentSignalRecorder` calls. No global log scraping, no JVM-wide exception hook.
+- **No sinks shipped**: Slack/Jira/webhook integrations are out of scope for 0.1.x.
 
-## Roadmap
+---
 
-### Short term
-- Add API key authentication
-- Add rate limiting
+## 10. Roadmap
 
-### Mid term
-- Support multiple LLM providers
-- Add observability (logs, metrics)
-- CI/CD pipeline
+See [`docs/Roadmap.md`](docs/Roadmap.md) for the full plan (phases 0–7, v0.1 scope, success criteria, and out-of-scope items).
 
-### Long term
-- Incident pattern detection
-- Integration with alerting tools
-- Historical analysis
-
-## Future Ideas
-
-- Batch analysis for multiple log files
-- Richer incident classification (beyond the current rule-based first pass)
-- Integration with alerting tools (PagerDuty, Opsgenie)
-- Slack/Teams bot interface
-- Historical incident pattern matching with a vector store
-
-## When to use Incident Copilot
-
-- You have a stack trace and need a quick starting point
-- You want a structured first-pass analysis before deep debugging
-- You are dealing with unfamiliar code or services
-- You want to reduce time-to-diagnosis during incidents
-
-## What this is NOT
-
-- Not a full observability platform
-- Not a replacement for logs, tracing, or metrics
-- Not guaranteed to be correct in all cases
-- Not a production-grade incident management system (yet)
+---
 
 ## License
 
-This project is not yet licensed. A license will be added before any public release.
+This project is not yet licensed publicly. A license will be added before the first published release; see the `TODO` markers in the parent `pom.xml` and `docs/PUBLISHING.md`.
